@@ -25,6 +25,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import it.bosler.remotealarm.model.UiText
+import it.bosler.remotealarm.ui.components.AlarmCardPreview
 import it.bosler.remotealarm.ui.theme.RemoteAlarmTheme
 
 sealed class ScreenType(
@@ -54,29 +56,6 @@ sealed class ScreenType(
     }
 }
 
-
-sealed class UiText {
-
-    data class StringValue(val str: String) : UiText()
-
-    class StringResource(
-        @StringRes val resourceId: Int,
-        vararg val args: Any
-    ) : UiText()
-
-    @Composable
-    fun asString(): String {
-        return when (this) {
-            is StringValue -> {
-                str
-            }
-
-            is StringResource -> {
-                stringResource(id = resourceId, formatArgs = args)
-            }
-        }
-    }
-}
 
 @Composable
 fun RemoteAlarmApp() {
@@ -131,17 +110,16 @@ fun MainScreen(navController : NavHostController, modifier: Modifier = Modifier)
 @Composable
 fun AlarmsScreen() {
     Column {
-        Text(ScreenType.Alarms.route)
-        //Text("${StringResource(id = ScreenType.Settings.resourceIdScreenType.Settings.resourceId.toString())}")
         Text(ScreenType.Alarms.name.asString())
+        AlarmCardPreview()
     }
 }
+
+
 
 @Composable
 fun ConnectionsScreen() {
     Column {
-        Text(ScreenType.Connections.route)
-        //Text("${StringResource(id = ScreenType.Settings.resourceIdScreenType.Settings.resourceId.toString())}")
         Text(ScreenType.Connections.name.asString())
     }
 }
@@ -149,8 +127,6 @@ fun ConnectionsScreen() {
 @Composable
 fun SettingsScreen() {
     Column {
-        Text(ScreenType.Settings.route)
-        //Text("${StringResource(id = ScreenType.Settings.resourceIdScreenType.Settings.resourceId.toString())}")
         Text(ScreenType.Settings.name.asString())
     }
 }
