@@ -26,6 +26,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import it.bosler.remotealarm.model.UiText
+import it.bosler.remotealarm.ui.components.AlarmCardListPreview
 import it.bosler.remotealarm.ui.components.AlarmCardPreview
 import it.bosler.remotealarm.ui.theme.RemoteAlarmTheme
 
@@ -111,7 +112,7 @@ fun MainScreen(navController : NavHostController, modifier: Modifier = Modifier)
 fun AlarmsScreen() {
     Column {
         Text(ScreenType.Alarms.name.asString())
-        AlarmCardPreview()
+        AlarmCardListPreview()
     }
 }
 
