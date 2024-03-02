@@ -29,10 +29,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import it.bosler.remotealarm.R
 import it.bosler.remotealarm.model.Alarms.Alarm
 import it.bosler.remotealarm.model.Alarms.Days
 import it.bosler.remotealarm.model.Alarms.Schedule
-import it.bosler.remotealarm.viewmodel.AlarmViewModel
+import it.bosler.remotealarm.ui.viewmodel.AlarmViewModel
 import java.time.LocalTime
 
 
@@ -49,9 +50,6 @@ fun AlarmCard(alarm: Alarm, toggleAlarm: (Boolean) -> Unit) {
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         // onclick: open time picker
-
-
-        //Text(alarm.time)
         // print all days in alarm.days
         if (alarm.schedule is Schedule.WeekdaysWithLocalTime) {
             Text(
@@ -61,11 +59,17 @@ fun AlarmCard(alarm: Alarm, toggleAlarm: (Boolean) -> Unit) {
                     fontWeight = FontWeight.W400
                 ),
                 color = MaterialTheme.colorScheme.primary
-
             )
-            for (day in alarm.schedule.days) {
-                Text(day.value.asString())
-            }
+            Text(
+                alarm.schedule.days.joinToString(", ") {
+                    weekdaysMapShort[it].toString()
+                },
+                style = TextStyle(
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.W400
+                ),
+                color = MaterialTheme.colorScheme.primary
+            )
         }
         Switch(
             modifier = Modifier
@@ -79,6 +83,25 @@ fun AlarmCard(alarm: Alarm, toggleAlarm: (Boolean) -> Unit) {
     }
 }
 
+val weekdaysMap = mapOf(
+    Days.MONDAY to R.string.monday,
+    Days.TUESDAY to R.string.tuesday,
+    Days.WEDNESDAY to R.string.wednesday,
+    Days.THURSDAY to R.string.thursday,
+    Days.FRIDAY to R.string.friday,
+    Days.SATURDAY to R.string.saturday,
+    Days.SUNDAY to R.string.sunday
+)
+
+val weekdaysMapShort = mapOf(
+    Days.MONDAY to R.string.monday_short,
+    Days.TUESDAY to R.string.tuesday_short,
+    Days.WEDNESDAY to R.string.wednesday_short,
+    Days.THURSDAY to R.string.thursday_short,
+    Days.FRIDAY to R.string.friday_short,
+    Days.SATURDAY to R.string.saturday_short,
+    Days.SUNDAY to R.string.sunday_short
+)
 
 @Composable
 fun AlarmCardList(

@@ -4,11 +4,19 @@
     <string name="connections">Connections</string>
     <string name="settings">Settings</string>
 
-    <string name="days_monday">monday</string>
-    <string name="days_tuesday">tuesday</string>
-    <string name="days_wednesday">wednesday</string>
-    <string name="days_thursday">thursday</string>
-    <string name="days_friday">friday</string>
-    <string name="days_saturday">saturday</string>
-    <string name="days_sunday">sunday</string>
+    <string name="monday">monday</string>
+    <string name="wednesday">wednesday</string>
+    <string name="tuesday">tuesday</string>
+    <string name="thursday">thursday</string>
+    <string name="friday">friday</string>
+    <string name="saturday">saturday</string>
+    <string name="sunday">sunday</string>
+
+    <string name="monday_short">mon</string>
+    <string name="tuesday_short">tue</string>
+    <string name="wednesday_short">wed</string>
+    <string name="thursday_short">thu</string>
+    <string name="friday_short">fri</string>
+    <string name="saturday_short">sat</string>
+    <string name="sunday_short">sun</string>
 </resources>

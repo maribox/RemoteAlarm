@@ -3,38 +3,47 @@ package it.bosler.remotealarm.model.Alarms
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverters
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-
 
 import androidx.room.TypeConverter
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import kotlinx.serialization.*
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.*
+import java.time.LocalDate
 
+@Serializable
 sealed class Schedule {
-    data class SpecificTimestamp(val UTCtimestamp: Long) : Schedule()
-    data class WeekdaysWithLocalTime(val days: List<Days>, val time: LocalTime) : Schedule()
+    @Serializable
+    @SerialName("SpecificTimestamp")
+    data class SpecificTimestamp(@Serializable val UTCtimestamp: Long) : Schedule()
+    @Serializable
+    @SerialName("WeekdaysWithLocalTime")
+    data class WeekdaysWithLocalTime(@Serializable val days: List<Days>, @Serializable(with=LocalTimeSerializer::class) val time: LocalTime) : Schedule()
+}
 
-    override fun toString(): String {
-        return when (this) {
-            is SpecificTimestamp -> {
-                "SpecificTimestamp: $UTCtimestamp"
-            }
-            is WeekdaysWithLocalTime -> {
-                "WeekdaysWithLocalTime: ${days.joinToString(", ")} at ${time.format(DateTimeFormatter.ofPattern("HH:mm"))}"
-            }
-        }
+@OptIn(ExperimentalSerializationApi::class)
+@Serializer(forClass = LocalTime::class)
+class LocalTimeSerializer : KSerializer<LocalTime> {
+    override fun serialize(encoder: Encoder, value: LocalTime) {
+        encoder.encodeString(value.toSecondOfDay().toString())
+    }
+
+    override fun deserialize(decoder: Decoder): LocalTime {
+        return LocalTime.ofSecondOfDay(decoder.decodeString().toLong())
     }
 }
 
+
 class ScheduleConverter {
-    // TODO: Setup Serialization/Deserialization for Schedule with kotlin serialization
-    private val gson = Gson()
+
 
     @TypeConverter
     fun scheduleToString(schedule: Schedule?): String {
-        println(gson.toJson(schedule))
-        return gson.toJson(schedule)
+        //println("Encoding: ")
+        //println(Json.encodeToString(schedule))
+        return Json.encodeToString(schedule)
     }
 
     @TypeConverter
@@ -42,10 +51,10 @@ class ScheduleConverter {
         if (data.isNullOrEmpty()) {
             return null
         }
-        val type = object : TypeToken<Schedule>() {}.type
-        println(data)
-        println(gson.fromJson(data, type) as Schedule)
-        return gson.fromJson(data, type) as Schedule
+        //println("Decoding: ")
+        //println(data)
+        //println(Json.decodeFromString<Schedule>(data))
+        return Json.decodeFromString<Schedule>(data)
     }
 }
 

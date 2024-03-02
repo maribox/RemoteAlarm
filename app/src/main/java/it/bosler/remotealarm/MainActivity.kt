@@ -11,17 +11,17 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.room.Room
 import it.bosler.remotealarm.model.Alarms.Alarm
 import it.bosler.remotealarm.model.Alarms.AlarmDatabase
-import it.bosler.remotealarm.viewmodel.AlarmViewModel
+import it.bosler.remotealarm.ui.viewmodel.AlarmViewModel
 
 class MainActivity : ComponentActivity() {
 
-    private val db by lazy {
+   /* private val db by lazy {
         Room.databaseBuilder(
             applicationContext, AlarmDatabase::class.java, "alarms.db"
         ).build()
     }
-
-    private val viewModel by viewModels<AlarmViewModel> {
+*/
+    /*private val viewModel by viewModels<AlarmViewModel> {
         object : ViewModelProvider.Factory {
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 if (modelClass.isAssignableFrom(AlarmViewModel::class.java)) {
@@ -31,12 +31,12 @@ class MainActivity : ComponentActivity() {
                 throw IllegalArgumentException("Unknown ViewModel class")
             }
         }
-    }
+    }*/
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            RemoteAlarmApp(alarmViewModel = viewModel)
+            RemoteAlarmApp()
         }
     }
 }

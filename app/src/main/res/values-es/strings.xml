@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RemoteAlarm</string>
+    <string name="alarms">Alarmas</string>
+    <string name="connections">Conexiones</string>
+    <string name="settings">Ajustes</string>
+    <string name="monday">lunes</string>
+    <string name="tuesday">martes</string>
+    <string name="wednesday">miércoles</string>
+    <string name="thursday">jueves</string>
+    <string name="friday">viernes</string>
+    <string name="saturday">sábado</string>
+    <string name="sunday">domingo</string>
+    <string name="monday_short">lun</string>
+    <string name="tuesday_short">mar</string>
+    <string name="wednesday_short">mié</string>
+    <string name="thursday_short">jue</string>
+    <string name="friday_short">vie</string>
+    <string name="saturday_short">sáb</string>
+    <string name="sunday_short">dom</string>
+</resources>

@@ -18,11 +18,11 @@ import androidx.navigation.compose.rememberNavController
 import it.bosler.remotealarm.ui.navigation.MainScreen
 import it.bosler.remotealarm.ui.navigation.ScreenType
 import it.bosler.remotealarm.ui.theme.RemoteAlarmTheme
-import it.bosler.remotealarm.viewmodel.AlarmViewModel
+import it.bosler.remotealarm.ui.viewmodel.AlarmViewModel
 
 
 @Composable
-fun RemoteAlarmApp(alarmViewModel: AlarmViewModel) {
+fun RemoteAlarmApp() {
     RemoteAlarmTheme {
         // A surface container using the 'background' color from the theme
         Surface(
@@ -37,12 +37,9 @@ fun RemoteAlarmApp(alarmViewModel: AlarmViewModel) {
             }
 
             Column {
-                val state by alarmViewModel.state.collectAsState()
                 MainScreen(
                     navController,
                     modifier = Modifier.weight(1f),
-                    alarmState = state,
-                    onAlarmEvent = alarmViewModel::onEvent
                 )
                 NavigationBar {
                     ScreenType.values.forEach { item ->
