@@ -1,3 +1,4 @@
+/*
 package it.bosler.remotealarm.model.Alarms
 
 import androidx.room.Dao
@@ -24,4 +25,4 @@ interface AlarmDAO {
     @Query("SELECT * FROM alarm WHERE enabled == 0")
     fun getAlarmsDisabled(): Flow<List<Alarm>>
 
-}
+}*/

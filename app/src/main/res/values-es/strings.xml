@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">RemoteAlarm</string>
+    <string name="control">Remoto</string>
     <string name="alarms">Alarmas</string>
     <string name="connections">Conexiones</string>
     <string name="settings">Ajustes</string>
@@ -18,4 +19,6 @@
     <string name="friday_short">vie</string>
     <string name="saturday_short">sáb</string>
     <string name="sunday_short">dom</string>
+    <string name="weekdays_short">días</string>
+    <string name="specific_timestamp_short">tiempo</string>
 </resources>

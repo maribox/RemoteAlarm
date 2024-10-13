@@ -8,6 +8,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import it.bosler.remotealarm.ui.screens.AlarmsScreen
 import it.bosler.remotealarm.ui.screens.ConnectionsScreen
+import it.bosler.remotealarm.ui.screens.ControlScreen
 import it.bosler.remotealarm.ui.screens.SettingsScreen
 
 @Composable
@@ -17,6 +18,9 @@ fun MainScreen(
 ) {
     Box(modifier) {
         NavHost(navController = navController, startDestination = ScreenType.Alarms.route) {
+            composable(ScreenType.Control.route) {
+                ControlScreen()
+            }
             composable(ScreenType.Alarms.route) {
                 AlarmsScreen()
             }
@@ -29,3 +33,4 @@ fun MainScreen(
         }
     }
 }
+

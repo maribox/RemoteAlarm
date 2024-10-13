@@ -1,14 +1,13 @@
 package it.bosler.remotealarm.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
-import it.bosler.remotealarm.model.Alarms.Alarm
-import it.bosler.remotealarm.model.Alarms.AlarmDAO
+import it.bosler.remotealarm.data.Alarms.Alarm
+import it.bosler.remotealarm.data.Alarms.Schedule
+import it.bosler.remotealarm.data.Alarms.ScheduleType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.getAndUpdate
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.updateAndGet
+import java.time.LocalTime
 
 class AlarmViewModel (
     //private val dao: AlarmDAO
@@ -28,14 +27,22 @@ class AlarmViewModel (
         _state.value = _state.value.copy(alarms = alarms.toList())
     }
 
+    fun changeCurrentAlarmType(scheduleType: ScheduleType) {
+        val newSchedule = when(scheduleType) {
+            ScheduleType.SpecificTimestamp -> Schedule.SpecificTimestamp(0)
+            ScheduleType.WeekdaysWithLocalTime -> Schedule.WeekdaysWithLocalTime(listOf(), LocalTime.now())
+        }
+        _state.value = _state.value.copy(currentEditedAlarm = _state.value.currentEditedAlarm!!.copy(schedule = newSchedule))
+    }
+
     fun openNewAlarm() {
-        _state.value =  _state.value.copy(isAlarmCreationOpen = true)
-        _state.value =  _state.value.copy(currentEditedAlarm = Alarm(alarms.size))
+        _state.value =  _state.value.copy(isAlarmEditOpen = true)
+        _state.value =  _state.value.copy(currentEditedAlarm = Alarm(alarms.size, schedule = Schedule.SpecificTimestamp(0)))
     }
 
     fun closeCurrentAlarm() {
         // TODO: Save to database
-        _state.value =  _state.value.copy(isAlarmCreationOpen = false)
+        _state.value =  _state.value.copy(isAlarmEditOpen = false)
         _state.value =  _state.value.copy(currentEditedAlarm = Alarm())
     }
 
@@ -51,3 +58,8 @@ class AlarmViewModel (
 
 }
 
+data class AlarmsScreenState(
+    val alarms: List<Alarm> = emptyList(),
+    val isAlarmEditOpen: Boolean = false,
+    val currentEditedAlarm: Alarm? = null,
+)

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">RemoteAlarm</string>
+    <string name="control">Fernbedienung</string>
     <string name="alarms">Wecker</string>
     <string name="connections">Verbindungen</string>
     <string name="settings">Einstellungen</string>
@@ -18,4 +19,6 @@
     <string name="friday_short">Fr</string>
     <string name="saturday_short">Sa</string>
     <string name="sunday_short">So</string>
+    <string name="weekdays_short">Wochentage</string>
+    <string name="specific_timestamp_short">Zeit</string>
 </resources>

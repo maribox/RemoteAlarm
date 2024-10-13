@@ -1,6 +1,7 @@
 package it.bosler.remotealarm
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -13,6 +14,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import it.bosler.remotealarm.ui.navigation.MainScreen
@@ -29,7 +31,7 @@ fun RemoteAlarmApp() {
             modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background
         ) {
             val navController = rememberNavController()
-            val currentDestination = remember { mutableStateOf(ScreenType.Alarms.route) }
+            val currentDestination = rememberSaveable { mutableStateOf(ScreenType.Alarms.route) }
 
             // When going back, update the currentDestination
             navController.addOnDestinationChangedListener { _, destination, _ ->
@@ -47,8 +49,8 @@ fun RemoteAlarmApp() {
                             label = { Text(item.name.asString()) },
                             selected = item.route == currentDestination.value,
                             onClick = {
-                                navController.navigate(item.route); currentDestination.value =
-                                item.route
+                                navController.navigate(item.route)
+                                currentDestination.value = item.route
                             })
                     }
                 }

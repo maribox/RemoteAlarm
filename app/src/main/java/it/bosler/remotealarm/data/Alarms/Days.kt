@@ -1,7 +1,7 @@
-package it.bosler.remotealarm.model.Alarms
+package it.bosler.remotealarm.data.Alarms
 
 import it.bosler.remotealarm.R
-import it.bosler.remotealarm.model.UiText
+import it.bosler.remotealarm.data.UiText
 
 enum class Days(val value: UiText) {
     MONDAY(UiText.StringResource(R.string.monday)),

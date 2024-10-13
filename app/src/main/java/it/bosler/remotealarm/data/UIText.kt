@@ -1,4 +1,4 @@
-package it.bosler.remotealarm.model
+package it.bosler.remotealarm.data
 
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
