@@ -31,7 +31,7 @@ fun RemoteAlarmApp() {
             modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background
         ) {
             val navController = rememberNavController()
-            val currentDestination = rememberSaveable { mutableStateOf(ScreenType.Alarms.route) }
+            val currentDestination = rememberSaveable { mutableStateOf(ScreenType.Control.route) }
 
             // When going back, update the currentDestination
             navController.addOnDestinationChangedListener { _, destination, _ ->

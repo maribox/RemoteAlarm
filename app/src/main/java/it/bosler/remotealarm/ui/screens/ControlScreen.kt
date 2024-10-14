@@ -61,46 +61,41 @@ fun ControlScreen(
     viewModel: ControlViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    var intensity by remember{ mutableStateOf(.3f) }
-    var cw_ww_balance by remember { mutableStateOf(.5f) }
-    Column(modifier = Modifier.fillMaxSize()) {
-        var sliderPosition by remember { mutableFloatStateOf(0f) }
-        Column (modifier = Modifier.fillMaxSize()) {
-            Spacer(Modifier.weight(.3f))
-            Row(Modifier.fillMaxWidth().weight(.6f)) {
-                Box(Modifier.height(500.dp).width(500.dp), contentAlignment = Alignment.Center) {
-                    Box(modifier = Modifier.clip(CircleShape).clickable(onClick = { intensity = (if (intensity == 0f) 1f else 0f)}).padding(50.dp) ) {
-                        Text(
-                            String.format("%.0f%%", intensity * 100),
-                            fontSize = 40.sp,
-                        )
-                    }
-                    CircularSlider(
-                        value = intensity,
-                        onValueChange = { intensity = it },
-                        progressColor = Color(0xf0f5b21e),
-                        backgroundColor = Color(0xff14314d),
-                        thumbColor = Color.Transparent,
-                        stroke = 30f,
-                        touchStroke = 500f,
-                        modifier = Modifier.fillMaxSize()
+    Column (modifier = Modifier.fillMaxSize()) {
+        Spacer(Modifier.weight(.3f))
+        Row(Modifier.fillMaxWidth().weight(.6f)) {
+            Box(Modifier.height(500.dp).width(500.dp), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.clip(CircleShape).clickable(onClick = { viewModel.setIntensity(if (state.intensity == 0f) 1f else 0f)}).padding(50.dp) ) {
+                    Text(
+                        String.format("%.0f%%", state.intensity * 100),
+                        fontSize = 40.sp,
                     )
                 }
-            }
-            Box(Modifier.weight(.1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                GradientSlider(
-                    value = cw_ww_balance,
-                    onValueChange = { cw_ww_balance = it },
-                    gradient = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color(0xFFFFF9FD),
-                            Color(0xFFFFB46B),
-                        )
-                    ),
-                    thumbColor = Color.DarkGray,
-                    modifier = Modifier.width(333.dp)
+                CircularSlider(
+                    value = state.intensity,
+                    onValueChange = { viewModel.setIntensity(it) },
+                    progressColor = Color(0xf0f5b21e),
+                    backgroundColor = Color(0xff14314d),
+                    thumbColor = Color.Transparent,
+                    stroke = 30f,
+                    touchStroke = 500f,
+                    modifier = Modifier.fillMaxSize()
                 )
             }
+        }
+        Box(Modifier.weight(.1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            GradientSlider(
+                value = state.cw_ww_balance,
+                onValueChange = { viewModel.setCW_WW_Balance(it) },
+                gradient = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color(0xFFFFF9FD),
+                        Color(0xFFFFB46B),
+                    )
+                ),
+                thumbColor = Color.DarkGray,
+                modifier = Modifier.width(333.dp)
+            )
         }
     }
 }

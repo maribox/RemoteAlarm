@@ -17,7 +17,7 @@ fun MainScreen(
     modifier: Modifier = Modifier,
 ) {
     Box(modifier) {
-        NavHost(navController = navController, startDestination = ScreenType.Alarms.route) {
+        NavHost(navController = navController, startDestination = ScreenType.Control.route) {
             composable(ScreenType.Control.route) {
                 ControlScreen()
             }
