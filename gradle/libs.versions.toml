@@ -1,8 +1,9 @@
 [versions]
+accompanistPermissions = "0.34.0"
 agp = "8.3.1"
 core = "3.3.0"
-hiltAndroid = "2.44"
 kotlin = "1.9.21"
+kotlinReflect = "1.9.21"
 ksp = "1.9.21-1.0.16"
 coreKtx = "1.12.0"
 junit = "4.13.2"
@@ -12,19 +13,12 @@ lifecycleRuntimeKtx = "2.6.2"
 activityCompose = "1.8.2"
 composeBom = "2024.09.03"
 navigationCompose = "2.7.6"
-room = "2.6.1"
 serialization = "1.6.0"
-dagger = "2.50"
-hiltCompiler = "2.50"
-hiltLifecycleViewmodel = "1.0.0-alpha03"
-hiltCommon = "1.2.0"
-hiltPlugin = "2.4.4"
+kable = "0.34.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 core = { module = "com.afollestad.material-dialogs:core", version.ref = "core" }
-hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hiltAndroid" }
-hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hiltAndroid" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
@@ -40,17 +34,15 @@ androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-material-iconsExtended = { group = "androidx.compose.material", name = "material-icons-extended" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
-androidx-room-common = { group = "androidx.room", name = "room-common", version.ref = "room" }
-androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
-androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+kotlin-reflect = { group = "org.jetbrains.kotlin", name = "kotlin-reflect", version.ref = "kotlinReflect" }
 kotlinx-serialization = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
-dagger = { group = "com.google.dagger", name = "dagger", version.ref = "dagger" }
-androidx-hilt-lifecycle-viewmodel = { group = "androidx.hilt", name = "hilt-lifecycle-viewmodel", version.ref = "hiltLifecycleViewmodel" }
-androidx-hilt-common = { group = "androidx.hilt", name = "hilt-common", version.ref = "hiltCommon" }
+#kable = { group = "com.juul.kable", name = "core", version.ref = "kable" }
+kable = { module = "com.juul.kable:kable-core", version = "0.34.0" }
+accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanistPermissions" }
+
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
 jetbrainsKotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
-hilt = { id = "com.google.dagger.hilt.android", version.ref = "hiltCompiler" }

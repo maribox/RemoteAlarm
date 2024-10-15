@@ -1,13 +1,23 @@
 package it.bosler.remotealarm.ui.screens
 
+import android.Manifest.permission.ACCESS_COARSE_LOCATION
+import android.Manifest.permission.ACCESS_FINE_LOCATION
+import android.Manifest.permission.BLUETOOTH_CONNECT
+import android.Manifest.permission.BLUETOOTH_SCAN
 import android.R.attr.angle
-import android.R.attr.padding
-import android.R.attr.radius
-import android.R.attr.value
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import android.os.Build.VERSION.SDK_INT
+import android.os.Build.VERSION_CODES.P
+import android.os.Build.VERSION_CODES.R
+import android.provider.Settings
+import android.util.Log
 import android.view.MotionEvent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement.Center
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,21 +26,32 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationDisabled
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Alignment.Companion.CenterHorizontally
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,31 +59,44 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInteropFilter
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat.startActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.MultiplePermissionsState
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import it.bosler.remotealarm.ui.viewmodel.ControlViewModel
-import java.nio.file.Files.size
 import kotlin.math.*
+import com.juul.kable.Bluetooth
+import com.juul.kable.Bluetooth.Availability.Available
+import com.juul.kable.Bluetooth.Availability.Unavailable
+import com.juul.kable.Reason.LocationServicesDisabled
+import com.juul.kable.Reason.Off
+import com.juul.kable.Reason.TurningOff
+import com.juul.kable.Reason.TurningOn
+import it.bosler.remotealarm.MainActivity
+
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun ControlScreen(
     viewModel: ControlViewModel = viewModel(),
 ) {
+    val bluetooth = Bluetooth.availability.collectAsState(initial = null).value
     val state by viewModel.state.collectAsState()
+
     Column (modifier = Modifier.fillMaxSize()) {
-        Spacer(Modifier.weight(.3f))
+        Box(Modifier.weight(.3f)) {
+            ScanPane(bluetooth)
+        }
         Row(Modifier.fillMaxWidth().weight(.6f)) {
             Box(Modifier.height(500.dp).width(500.dp), contentAlignment = Alignment.Center) {
                 Box(modifier = Modifier.clip(CircleShape).clickable(onClick = { viewModel.setIntensity(if (state.intensity == 0f) 1f else 0f)}).padding(50.dp) ) {
@@ -99,6 +133,156 @@ fun ControlScreen(
         }
     }
 }
+
+@OptIn(ExperimentalPermissionsApi::class)
+@Composable
+private fun ScanPane(bluetooth: Bluetooth.Availability?) {
+    ProvideTextStyle(
+        TextStyle(color = contentColorFor(backgroundColor = Color.Cyan))
+    ) {
+        val permissionsState = rememberMultiplePermissionsState(Bluetooth.permissionsNeeded)
+
+        var didAskForPermission by remember { mutableStateOf(false) }
+        if (!didAskForPermission) {
+            didAskForPermission = true
+            SideEffect {
+                permissionsState.launchMultiplePermissionRequest()
+            }
+        }
+
+        if (permissionsState.allPermissionsGranted) {
+            PermissionGranted(bluetooth)
+        } else {
+            if (permissionsState.shouldShowRationale) {
+                BluetoothPermissionsNotGranted(permissionsState)
+            } else {
+                //BluetoothPermissionsNotAvailable({MainActivity.openAppDetails()})
+                Log.d("ControlScreen", "Bluetooth permission not available")
+            }
+        }
+    }
+}
+
+
+
+
+
+@Composable
+private fun PermissionGranted(bluetooth: Bluetooth.Availability?) {
+    when (bluetooth) {
+        Available -> {
+            LaunchedEffect(Unit) {
+                Log.d("ControlScreen", "Bluetooth available")
+            }
+        }
+        is Unavailable -> {
+            LaunchedEffect(Unit) {
+                Log.d("ControlScreen", "Bluetooth unavailable")
+            }
+        }
+        null -> Loading()
+    }
+}
+
+@Composable
+private fun Loading() {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(20.dp),
+        horizontalAlignment = CenterHorizontally,
+        verticalArrangement = Center,
+    ) {
+        CircularProgressIndicator()
+    }
+}
+
+
+// taken from kable sample project
+val Bluetooth.permissionsNeeded: List<String> by lazy {
+    when {
+        // If your app targets Android 9 (API level 28) or lower, you can declare the ACCESS_COARSE_LOCATION permission
+        // instead of the ACCESS_FINE_LOCATION permission.
+        // https://developer.android.com/guide/topics/connectivity/bluetooth/permissions#declare-android11-or-lower
+        SDK_INT <= P -> listOf(ACCESS_COARSE_LOCATION)
+
+        // ACCESS_FINE_LOCATION is necessary because, on Android 11 (API level 30) and lower, a Bluetooth scan could
+        // potentially be used to gather information about the location of the user.
+        // https://developer.android.com/guide/topics/connectivity/bluetooth/permissions#declare-android11-or-lower
+        SDK_INT <= R -> listOf(ACCESS_FINE_LOCATION)
+
+        // If your app targets Android 12 (API level 31) or higher, declare the following permissions in your app's
+        // manifest file:
+        //
+        // 1. If your app looks for Bluetooth devices, such as BLE peripherals, declare the `BLUETOOTH_SCAN` permission.
+        // 2. If your app makes the current device discoverable to other Bluetooth devices, declare the
+        //    `BLUETOOTH_ADVERTISE` permission.
+        // 3. If your app communicates with already-paired Bluetooth devices, declare the BLUETOOTH_CONNECT permission.
+        // https://developer.android.com/guide/topics/connectivity/bluetooth/permissions#declare-android12-or-higher
+        else /* SDK_INT >= S */ -> listOf(BLUETOOTH_SCAN, BLUETOOTH_CONNECT)
+    }
+}
+
+@OptIn(ExperimentalPermissionsApi::class)
+@Composable
+private fun BluetoothPermissionsNotGranted(permissions: MultiplePermissionsState) {
+    ActionRequired(
+        icon = Icons.Filled.LocationDisabled,
+        contentDescription = "Bluetooth permissions required",
+        description = "Bluetooth permissions are required for scanning. Please grant the permission.",
+        buttonText = "Continue",
+        onClick = permissions::launchMultiplePermissionRequest,
+    )
+}
+
+@Composable
+private fun BluetoothPermissionsNotAvailable(openSettingsAction: () -> Unit) {
+    ActionRequired(
+        icon = Icons.Filled.Warning,
+        contentDescription = "Bluetooth permissions required",
+        description = "Bluetooth permission denied. Please, grant access on the Settings screen.",
+        buttonText = "Open Settings",
+        onClick = openSettingsAction,
+    )
+}
+
+@Composable
+private fun ActionRequired(
+    icon: ImageVector,
+    contentDescription: String?,
+    description: String,
+    buttonText: String,
+    onClick: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(20.dp),
+        horizontalAlignment = CenterHorizontally,
+        verticalArrangement = Center,
+    ) {
+        Icon(
+            modifier = Modifier.size(150.dp),
+            tint = contentColorFor(backgroundColor = Color.Magenta),
+            imageVector = icon,
+            contentDescription = contentDescription,
+        )
+        Spacer(Modifier.size(8.dp))
+        Text(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(CenterHorizontally),
+            textAlign = TextAlign.Center,
+            text = description,
+        )
+        Spacer(Modifier.size(15.dp))
+        Button(onClick) {
+            Text(buttonText)
+        }
+    }
+}
+
+
 
 @Composable
 fun GradientSlider(

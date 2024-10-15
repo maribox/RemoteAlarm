@@ -65,8 +65,6 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.compose.material.iconsExtended)
     implementation(libs.androidx.navigation.compose)
-    implementation(libs.androidx.room.common)
-    implementation(libs.androidx.room.ktx)
     implementation(libs.kotlinx.serialization)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -75,9 +73,10 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-    ksp(libs.androidx.room.compiler)
     implementation(libs.core)
-    implementation(kotlin("reflect"))
-    implementation("org.jetbrains.kotlin:kotlin-reflect:1.9.21")
+    //implementation(kotlin("reflect"))
+    implementation(libs.kotlin.reflect)
+    implementation(libs.kable)
+    implementation(libs.accompanist.permissions)
 
 }
