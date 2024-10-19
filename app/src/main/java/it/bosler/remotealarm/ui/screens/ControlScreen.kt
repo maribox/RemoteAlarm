@@ -5,38 +5,45 @@ import android.Manifest.permission.ACCESS_FINE_LOCATION
 import android.Manifest.permission.BLUETOOTH_CONNECT
 import android.Manifest.permission.BLUETOOTH_SCAN
 import android.R.attr.angle
-import android.app.Activity
-import android.content.Intent
-import android.net.Uri
 import android.os.Build.VERSION.SDK_INT
 import android.os.Build.VERSION_CODES.P
 import android.os.Build.VERSION_CODES.R
-import android.provider.Settings
 import android.util.Log
 import android.view.MotionEvent
+import android.view.Surface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Arrangement.Center
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBackIosNew
 import androidx.compose.material.icons.filled.LocationDisabled
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -55,6 +62,7 @@ import androidx.compose.ui.Alignment.Companion.CenterHorizontally
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -64,25 +72,21 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat.startActivity
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
-import it.bosler.remotealarm.ui.viewmodel.ControlViewModel
-import kotlin.math.*
 import com.juul.kable.Bluetooth
 import com.juul.kable.Bluetooth.Availability.Available
 import com.juul.kable.Bluetooth.Availability.Unavailable
-import com.juul.kable.Reason.LocationServicesDisabled
-import com.juul.kable.Reason.Off
-import com.juul.kable.Reason.TurningOff
-import com.juul.kable.Reason.TurningOn
-import it.bosler.remotealarm.MainActivity
+import it.bosler.remotealarm.ui.viewmodel.ControlViewModel
+import kotlin.math.*
 
 
 @Composable
@@ -92,51 +96,73 @@ fun ControlScreen(
 ) {
     val bluetooth = Bluetooth.availability.collectAsState(initial = null).value
     val state by viewModel.state.collectAsState()
-
-    Column (modifier = Modifier.fillMaxSize()) {
-        Box(Modifier.weight(.3f)) {
-            ScanPane(bluetooth)
+    var scanPaneExpanded by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxSize()) {
+        Box(Modifier
+            .fillMaxHeight(if (scanPaneExpanded) .9f else .3f)
+            .fillMaxWidth()
+            .zIndex(1f)) {
+            ScanPane(bluetooth, scanPaneExpanded, { scanPaneExpanded = it })
         }
-        Row(Modifier.fillMaxWidth().weight(.6f)) {
-            Box(Modifier.height(500.dp).width(500.dp), contentAlignment = Alignment.Center) {
-                Box(modifier = Modifier.clip(CircleShape).clickable(onClick = { viewModel.setIntensity(if (state.intensity == 0f) 1f else 0f)}).padding(50.dp) ) {
-                    Text(
-                        String.format("%.0f%%", state.intensity * 100),
-                        fontSize = 40.sp,
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier
+            .fillMaxSize()
+            .zIndex(0f)) {
+            Spacer(Modifier.weight(.3f))
+            Row(Modifier
+                .weight(.6f)) {
+                Box(Modifier
+                    .height(500.dp)
+                    .width(500.dp), contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable(onClick = { viewModel.setIntensity(if (state.intensity == 0f) 1f else 0f) })
+                            .padding(50.dp)
+                    ) {
+                        Text(
+                            String.format("%.0f%%", state.intensity * 100),
+                            fontSize = 40.sp,
+                        )
+                    }
+                    CircularSlider(
+                        value = state.intensity,
+                        onValueChange = { viewModel.setIntensity(it) },
+                        progressColor = Color(0xf0f5b21e),
+                        backgroundColor = Color(0xff14314d),
+                        thumbColor = Color.Transparent,
+                        stroke = 30f,
+                        touchStroke = 500f,
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
-                CircularSlider(
-                    value = state.intensity,
-                    onValueChange = { viewModel.setIntensity(it) },
-                    progressColor = Color(0xf0f5b21e),
-                    backgroundColor = Color(0xff14314d),
-                    thumbColor = Color.Transparent,
-                    stroke = 30f,
-                    touchStroke = 500f,
-                    modifier = Modifier.fillMaxSize()
+            }
+            Box(Modifier
+                .weight(.1f)
+                .fillMaxWidth(), contentAlignment = Alignment.Center) {
+                GradientSlider(
+                    value = state.cw_ww_balance,
+                    onValueChange = { viewModel.setCW_WW_Balance(it) },
+                    gradient = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color(0xFFFFF9FD),
+                            Color(0xFFFFB46B),
+                        )
+                    ),
+                    thumbColor = Color.DarkGray,
+                    modifier = Modifier.width(333.dp)
                 )
             }
-        }
-        Box(Modifier.weight(.1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            GradientSlider(
-                value = state.cw_ww_balance,
-                onValueChange = { viewModel.setCW_WW_Balance(it) },
-                gradient = Brush.horizontalGradient(
-                    colors = listOf(
-                        Color(0xFFFFF9FD),
-                        Color(0xFFFFB46B),
-                    )
-                ),
-                thumbColor = Color.DarkGray,
-                modifier = Modifier.width(333.dp)
-            )
         }
     }
 }
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-private fun ScanPane(bluetooth: Bluetooth.Availability?) {
+private fun ScanPane(
+    bluetooth: Bluetooth.Availability?,
+    scanPaneExpanded: Boolean,
+    onExpandToggle: (Boolean) -> Unit
+) {
     ProvideTextStyle(
         TextStyle(color = contentColorFor(backgroundColor = Color.Cyan))
     ) {
@@ -151,7 +177,7 @@ private fun ScanPane(bluetooth: Bluetooth.Availability?) {
         }
 
         if (permissionsState.allPermissionsGranted) {
-            PermissionGranted(bluetooth)
+            PermissionGranted(bluetooth, scanPaneExpanded, onExpandToggle)
         } else {
             if (permissionsState.shouldShowRationale) {
                 BluetoothPermissionsNotGranted(permissionsState)
@@ -164,22 +190,93 @@ private fun ScanPane(bluetooth: Bluetooth.Availability?) {
 }
 
 
-
-
-
 @Composable
-private fun PermissionGranted(bluetooth: Bluetooth.Availability?) {
+private fun PermissionGranted(
+    bluetooth: Bluetooth.Availability?,
+    scanPaneExpanded: Boolean,
+    onExpandToggle: (Boolean) -> Unit,
+    connectionState: Boolean = true
+) {
+    var collapsedCardHeight by remember { mutableStateOf(0.dp) }
+    val density = LocalDensity.current
     when (bluetooth) {
         Available -> {
-            LaunchedEffect(Unit) {
-                Log.d("ControlScreen", "Bluetooth available")
+            OutlinedCard(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier
+                    .padding(16.dp)
+                    .fillMaxSize()
+                    .onGloballyPositioned {
+                        if (!scanPaneExpanded) {
+                            collapsedCardHeight = with(density) {
+                                it.size.height.toDp()
+                            }
+                        }
+                    }) {
+                Row(Modifier
+                    .padding(16.dp)
+                    .fillMaxWidth()) {
+                    Column(Modifier.weight(.85f)) {
+                        Box(Modifier.height(collapsedCardHeight - 32.dp)) {
+                            Card(modifier = Modifier.fillMaxSize()) {
+                                // show current connection status, name, and indicator light (green, yellow or red)
+                                Column (verticalArrangement = Arrangement.SpaceAround, modifier = Modifier.fillMaxSize().padding(8.dp)) {
+                                    if (!connectionState) {
+                                        Text("Connecting...", fontSize = 20.sp)
+                                        Spacer(Modifier.height(8.dp))
+                                    }
+                                    Row(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(8.dp),
+                                        horizontalArrangement = Arrangement.SpaceEvenly,
+                                        verticalAlignment = Alignment.CenterVertically) {
+                                        Text("Device Name", fontSize = 20.sp)
+                                        Box(
+                                            Modifier
+                                                .size(50.dp)
+                                                .clip(CircleShape)
+                                                .background(Color.Green)
+                                                .fillMaxWidth(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("Indicator Light", fontSize = 20.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (scanPaneExpanded) {
+                            Column {
+
+                            }
+                        }
+                    }
+                    Column(
+                        Modifier
+                            .clickable { onExpandToggle(!scanPaneExpanded) }
+                            .weight(.15f)
+                            .fillMaxHeight(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            Icons.Filled.ArrowBackIosNew,
+                            contentDescription = "Toggle Scan Pane",
+                            modifier = Modifier
+                                .offset(
+                                    x = 8.dp,
+                                    y = ((collapsedCardHeight- 30.dp - 32.dp) / 2), // -30 because of the icon itself and -32 because of padding
+                                )
+                                .height(30.dp)
+                                .rotate(if (scanPaneExpanded) 90f else 270f)
+                        )
+                    }
+                }
             }
         }
+
         is Unavailable -> {
             LaunchedEffect(Unit) {
                 Log.d("ControlScreen", "Bluetooth unavailable")
             }
         }
+
         null -> Loading()
     }
 }
@@ -283,7 +380,6 @@ private fun ActionRequired(
 }
 
 
-
 @Composable
 fun GradientSlider(
     value: Float,
@@ -292,8 +388,10 @@ fun GradientSlider(
     gradient: Brush,
     thumbColor: Color
 ) {
-    Box (contentAlignment = Alignment.Center){
-        CustomSliderTrack(gradient, modifier = modifier.height(4.dp).fillMaxSize())
+    Box(contentAlignment = Alignment.Center) {
+        CustomSliderTrack(gradient, modifier = modifier
+            .height(4.dp)
+            .fillMaxSize())
         Slider(
             value = value,
             onValueChange = onValueChange,
@@ -302,7 +400,9 @@ fun GradientSlider(
                 activeTrackColor = Color.Transparent,
                 inactiveTrackColor = Color.Transparent,
             ),
-            modifier = modifier.height(4.dp).fillMaxSize()
+            modifier = modifier
+                .height(4.dp)
+                .fillMaxSize()
         )
     }
 }
@@ -334,8 +434,8 @@ fun CircularSlider(
     thumbColor: Color = Color.Blue,
     progressColor: Color = Color.Black,
     backgroundColor: Color = Color.LightGray,
-    onValueChange: ((Float)->Unit)? = null
-){
+    onValueChange: ((Float) -> Unit)? = null
+) {
     var angle by remember { mutableStateOf(-60f) }
     var last by remember { mutableStateOf(0f) }
     var radius by remember { mutableStateOf(0f) }
@@ -346,27 +446,30 @@ fun CircularSlider(
         appliedAngle = value * 300f
     }
 
-    LaunchedEffect(key1 = angle){
+    LaunchedEffect(key1 = angle) {
         var a = angle
         a += 60
-        if(a<=0f){
+        if (a <= 0f) {
             a += 360
         }
-        a = a.coerceIn(0f,300f)
-        if(last<150f&&a==300f){
+        a = a.coerceIn(0f, 300f)
+        if (last < 150f && a == 300f) {
             a = 0f
         }
         last = a
         appliedAngle = a
     }
-    LaunchedEffect(key1 = appliedAngle){
-        onValueChange?.invoke(appliedAngle/300f)
+    LaunchedEffect(key1 = appliedAngle) {
+        onValueChange?.invoke(appliedAngle / 300f)
     }
     Canvas(
         modifier = modifier
             .onGloballyPositioned {
                 center = Offset(it.size.width / 2f, it.size.height / 2f)
-                radius = min(it.size.width.toFloat(), it.size.height.toFloat()) / 2f - padding - stroke/2f
+                radius = min(
+                    it.size.width.toFloat(),
+                    it.size.height.toFloat()
+                ) / 2f - padding - stroke / 2f
             }
             .pointerInteropFilter {
                 val x = it.x
@@ -382,22 +485,24 @@ fun CircularSlider(
                             return@pointerInteropFilter false
                         }
                     }
+
                     MotionEvent.ACTION_MOVE -> {
                         angle = angle(center, offset)
                     }
+
                     else -> {
                         return@pointerInteropFilter false
                     }
                 }
                 return@pointerInteropFilter true
             }
-    ){
+    ) {
         drawArc(
             color = backgroundColor,
             startAngle = -240f,
             sweepAngle = 300f,
-            topLeft = center - Offset(radius,radius),
-            size = Size(radius*2,radius*2),
+            topLeft = center - Offset(radius, radius),
+            size = Size(radius * 2, radius * 2),
             useCenter = false,
             style = Stroke(
                 width = stroke,
@@ -408,8 +513,8 @@ fun CircularSlider(
             color = progressColor,
             startAngle = 120f,
             sweepAngle = appliedAngle,
-            topLeft = center - Offset(radius,radius),
-            size = Size(radius*2,radius*2),
+            topLeft = center - Offset(radius, radius),
+            size = Size(radius * 2, radius * 2),
             useCenter = false,
             style = Stroke(
                 width = stroke,
@@ -420,8 +525,8 @@ fun CircularSlider(
             color = thumbColor,
             radius = stroke,
             center = center + Offset(
-                radius*cos((120+appliedAngle)*PI/180f).toFloat(),
-                radius*sin((120+appliedAngle)*PI/180f).toFloat()
+                radius * cos((120 + appliedAngle) * PI / 180f).toFloat(),
+                radius * sin((120 + appliedAngle) * PI / 180f).toFloat()
             )
         )
     }
@@ -433,10 +538,10 @@ fun angle(center: Offset, offset: Offset): Float {
     return deg.toFloat()
 }
 
-fun distance(first: Offset, second: Offset) : Float{
-    return sqrt((first.x-second.x).square()+(first.y-second.y).square())
+fun distance(first: Offset, second: Offset): Float {
+    return sqrt((first.x - second.x).square() + (first.y - second.y).square())
 }
 
-fun Float.square(): Float{
-    return this*this
+fun Float.square(): Float {
+    return this * this
 }
