@@ -74,6 +74,7 @@ import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.juul.kable.Bluetooth
 import com.juul.kable.Bluetooth.Availability.Available
 import com.juul.kable.Bluetooth.Availability.Unavailable
+import com.juul.kable.State
 import it.bosler.remotealarm.ui.viewmodel.ControlViewModel
 import it.bosler.remotealarm.ui.viewmodel.ScanStatus.Scanning
 import kotlin.math.*
@@ -233,18 +234,19 @@ private fun PermissionGranted(
                                     .padding(8.dp),
                                     horizontalArrangement = Arrangement.SpaceEvenly,
                                     verticalAlignment = Alignment.CenterVertically) {
-                                    Text(viewModel.connectedPeripheralFlow.collectAsState().value?.name ?: "Not Connected", fontSize = 20.sp)
+                                    var (text, color) = when (viewModel.connectionState.collectAsState().value) {
+                                        is State.Disconnected ->  "Disconnected" to Color.Gray
+                                        is State.Connecting -> "Connecting..." to Color.Yellow
+                                        is State.Connected ->  (viewModel.connectedPeripheralFlow.collectAsState().value?.name?: "Connected") to Color.Green
+                                        is State.Disconnecting -> "Disconnecting..." to Color.Gray
+                                    }
+                                    Text(text, fontSize = 20.sp)
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Box(
                                         Modifier
                                             .size(30.dp)
                                             .clip(CircleShape)
-                                            .background(
-                                                if (viewModel.connectedPeripheralFlow.collectAsState().value == null)
-                                                    Color.Gray
-                                                else
-                                                    Color.Green
-                                            )
+                                            .background(color)
                                             .fillMaxWidth(),
                                         contentAlignment = Alignment.Center
                                     ) {

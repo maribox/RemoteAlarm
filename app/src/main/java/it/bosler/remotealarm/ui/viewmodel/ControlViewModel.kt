@@ -8,19 +8,19 @@ import com.juul.kable.Characteristic
 import com.juul.kable.Peripheral
 import com.juul.kable.PlatformAdvertisement
 import com.juul.kable.Scanner
-import com.juul.kable.State
+import com.juul.kable.State as PeripheralConnectionState
 import com.juul.kable.State.Disconnected
 import com.juul.kable.characteristicOf
 import com.juul.kable.logs.Logging.Level.Events
-import com.juul.kable.logs.Logging.Level.Data
+import com.juul.kable.logs.Logging.Level.Warnings
 import com.juul.kable.peripheral
 import it.bosler.remotealarm.ui.viewmodel.ScanStatus.Scanning
 import it.bosler.remotealarm.ui.viewmodel.ScanStatus.Stopped
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelChildren
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +32,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.TimeUnit
-import kotlin.time.Duration.Companion.seconds
 
 private val SCAN_DURATION_MILLIS = TimeUnit.SECONDS.toMillis(10)
 
@@ -51,6 +50,8 @@ class ControlViewModel () : ViewModel() {
         _uiState.value = _uiState.value.copy(scanPaneExpanded = expanded)
         foundCompatible.clear()
         foundIncompatible.clear()
+        _compatibleAdvertisements.value = emptyList()
+        _incompatibleAdvertisements.value = emptyList()
     }
 
     private val _connectedPeripheral = MutableStateFlow<Peripheral?>(null)
@@ -59,6 +60,15 @@ class ControlViewModel () : ViewModel() {
         get() = _connectedPeripheral.value?: throw UninitializedPropertyAccessException("Peripheral has not been initialized yet.")
     private val isPeripheralConnected : Boolean
         get() = _connectedPeripheral.value != null
+
+    val connectionState : StateFlow<PeripheralConnectionState>
+        get() {
+            return if (isPeripheralConnected) {
+                connectedPeripheral.state
+            } else {
+                MutableStateFlow(Disconnected(null))
+            }
+        }
 
     private lateinit var peripheralScope : CoroutineScope
 
@@ -135,26 +145,18 @@ class ControlViewModel () : ViewModel() {
         // TODO: If input is now made, app will crash because peripheral can't be written to
         _connectedPeripheral.value = peripheralScope.peripheral(advertisement) {
             logging {
-                level = Data
+                level = Warnings
             }
         }
 
         connectedPeripheral.state.onEach { state ->
-            Log.i("Control/Peripheral", "Received state: $state")
+            Log.i("Control/State", "Received state: $state")
             if (state is Disconnected && state.status != null) {
-                try {
-                    Log.i("Control/Peripheral", "Attempting connection. ")
-                    //TODO: connect()
-                } catch (e: Exception) {
-                    Log.e("Control/Peripheral", e.toString())
-                    throw e
-                }
-                Log.v ("Control/Peripheral", "Waiting to reconnect")
-                delay(2.seconds) // Throttle reconnects so we don't hammer the system if connection immediately drops.
+                disconnectPeripheral()
             }
         }.launchIn(viewModelScope).apply {
             invokeOnCompletion { cause ->
-                Log.w("Control/Peripheral",  "$cause - Auto connector complete")
+                Log.w("Control/State",  "$cause - Auto connector complete")
             }
         }
 
@@ -162,7 +164,7 @@ class ControlViewModel () : ViewModel() {
             try {
                 connectedPeripheral.connect()
             } catch (e: Exception) {
-                Log.e("Control/Peripheral", e.toString())
+                Log.e("Control/Peripheral", "Connectiong to Peripheral failed. Reason: $e")
             }
             setScanPane(false)
 
@@ -182,10 +184,15 @@ class ControlViewModel () : ViewModel() {
             Log.d("Connect/Char", "Characteristic: ${alarmArrayChar.characteristicUuid}")
             Log.d("Connect/Char", "Characteristic: ${lightStateChar.characteristicUuid}")
             Log.d("Connect/Char", "Characteristic: ${timestampChar.characteristicUuid}")
-
-            var lightStateBytes = connectedPeripheral.read(lightStateChar)
-            var cw = lightStateBytes.get(0).toInt()
-            var ww = lightStateBytes.get(1).toInt()
+            var cw = 0
+            var ww = 0
+            try {
+                var lightStateBytes = connectedPeripheral.read(lightStateChar)
+                cw = lightStateBytes.get(0).toUByte().toInt()
+                ww = lightStateBytes.get(1).toUByte().toInt()
+            } catch (e: Exception) {
+                Log.e("Control/Peripheral", "Reading from Peripheral failed. Reason: $e")
+            }
 
             Log.d("Connect/Char", "LightState on connect: $cw $ww")
 
@@ -209,7 +216,23 @@ class ControlViewModel () : ViewModel() {
                 255.0
             ).toInt().toByte()
         if (!isPeripheralConnected || !peripheralScope.isActive) return
-        connectedPeripheral.write(lightStateChar, byteArrayOf(cw, ww))
+        try {
+            connectedPeripheral.write(lightStateChar, byteArrayOf(cw, ww))
+        } catch (e: Exception) {
+            Log.e("Control/Peripheral", "Writing to Peripheral failed. Disconnecting. Reason: $e")
+            disconnectPeripheral()
+        }
+    }
+
+    private suspend fun disconnectPeripheral() {
+        Log.d("Control/State", "Disconnecting from Peripheral...")
+        try {
+            connectedPeripheral.disconnect()
+        } catch (e: Exception) {
+            Log.e("Control/Peripheral", "Disconnecting from Peripheral failed. Reason: $e")
+        }
+        _connectedPeripheral.value = null
+        peripheralScope.cancel()
     }
 
     fun setIntensity(intensity: Double) {
@@ -234,8 +257,7 @@ class ControlViewModel () : ViewModel() {
     fun onScanPaneClicked() {
         if (isPeripheralConnected && !uiState.value.scanPaneExpanded) {
             peripheralScope.launch {
-                connectedPeripheral.disconnect()
-                _connectedPeripheral.value = null
+                disconnectPeripheral()
             }
         }
         setScanPane(!uiState.value.scanPaneExpanded)
