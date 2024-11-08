@@ -1,32 +1,274 @@
 package it.bosler.remotealarm.ui.viewmodel
 
-import android.bluetooth.BluetoothManager
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import android.util.Log
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.benasher44.uuid.uuidFrom
+import com.juul.kable.Characteristic
+import com.juul.kable.Peripheral
+import com.juul.kable.PlatformAdvertisement
+import com.juul.kable.Scanner
+import com.juul.kable.State
+import com.juul.kable.State.Disconnected
+import com.juul.kable.characteristicOf
+import com.juul.kable.logs.Logging.Level.Events
+import com.juul.kable.logs.Logging.Level.Data
+import com.juul.kable.peripheral
+import it.bosler.remotealarm.ui.viewmodel.ScanStatus.Scanning
+import it.bosler.remotealarm.ui.viewmodel.ScanStatus.Stopped
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.seconds
+
+private val SCAN_DURATION_MILLIS = TimeUnit.SECONDS.toMillis(10)
+
+private const val LIGHT_SERVICE_UUID = "b53e36d0-a21b-47b2-abac-343f523ff4d5"
+
+private const val ALARM_ARRAY_CHARACTERISTIC_UUID = "a14af994-2a22-4762-b9e5-cb17a716645c"
+private const val LIGHT_STATE_CHARACTERISTIC_UUID = "3c95cda9-7bde-471d-9c2b-ac0364befa78"
+private const val TIMESTAMP_CHARACTERISTIC_UUID = "ab110e08-d3bb-4c8c-87a7-51d7076218cf"
 
 class ControlViewModel () : ViewModel() {
-    private val _state = MutableStateFlow(ControlsScreenState());
-    val state : StateFlow<ControlsScreenState> = _state.asStateFlow()
-    // TODO: Load state from database/BLE connection
 
-    // Events
-    fun setIntensity(intensity: Float) {
-        _state.value = _state.value.copy(intensity = intensity)
+    private val _uiState = MutableStateFlow(ControlsScreenState());
+    val uiState : StateFlow<ControlsScreenState> = _uiState.asStateFlow()
+
+    fun setScanPane(expanded: Boolean) {
+        _uiState.value = _uiState.value.copy(scanPaneExpanded = expanded)
+        foundCompatible.clear()
+        foundIncompatible.clear()
     }
 
-    fun setCW_WW_Balance(cw_ww_balance: Float) {
-        _state.value = _state.value.copy(cw_ww_balance = cw_ww_balance)
+    private val _connectedPeripheral = MutableStateFlow<Peripheral?>(null)
+    val connectedPeripheralFlow = _connectedPeripheral.asStateFlow()
+    private val connectedPeripheral : Peripheral
+        get() = _connectedPeripheral.value?: throw UninitializedPropertyAccessException("Peripheral has not been initialized yet.")
+    private val isPeripheralConnected : Boolean
+        get() = _connectedPeripheral.value != null
+
+    private lateinit var peripheralScope : CoroutineScope
+
+    private lateinit var alarmArrayChar : Characteristic
+    private lateinit var lightStateChar : Characteristic
+    private lateinit var timestampChar : Characteristic
+
+    // TODO: Load state from database/BLE connection
+    private val _lightState = MutableStateFlow(LightState());
+    val lightState : StateFlow<LightState> = _lightState.asStateFlow()
+
+    private val scanScope = viewModelScope.childScope()
+    private val foundCompatible = hashMapOf<String, PlatformAdvertisement>()
+    private val foundIncompatible = hashMapOf<String, PlatformAdvertisement>()
+
+    private val _status = MutableStateFlow<ScanStatus>(Stopped)
+    val status = _status.asStateFlow()
+
+    private val _compatibleAdvertisements = MutableStateFlow<List<PlatformAdvertisement>>(emptyList())
+    val compatibleAdvertisements = _compatibleAdvertisements.asStateFlow()
+
+    private val _incompatibleAdvertisements = MutableStateFlow<List<PlatformAdvertisement>>(emptyList())
+    val incompatibleAdvertisements = _incompatibleAdvertisements.asStateFlow()
+
+    // Events
+    fun start() {
+        Log.v("Control/Scan", "Start")
+        if (status.value == Scanning) return // Scan already in progress.
+        _status.value = Scanning
+
+        scanScope.launch {
+            withTimeoutOrNull(SCAN_DURATION_MILLIS) {
+                scanner
+                    .advertisements
+                    .catch { cause -> _status.value = ScanStatus.Failed(cause.message ?: "Unknown error") }
+                    .onCompletion { cause -> if (cause == null || cause is java.util.concurrent.CancellationException) _status.value = Stopped }
+                    .collect { advertisement ->
+                        advertisement.uuids.forEach {
+                            if (it == uuidFrom(LIGHT_SERVICE_UUID)) {
+                                Log.v(
+                                    "Control/Advertisements",
+                                    "found correct device ${advertisement.name}"
+                                )
+                                foundCompatible[advertisement.address] = advertisement
+                                _compatibleAdvertisements.value = foundCompatible.values.toList()
+                                return@collect
+                            }
+                        }
+
+                        // valid Service-UUID has not been found
+                        if (advertisement.name != null) {
+                            Log.d("Control/Advertisements", "found incompatible device ${advertisement.name}")
+                            foundIncompatible[advertisement.address] = advertisement
+                        }
+                        _incompatibleAdvertisements.value = foundIncompatible.values.toList()
+                    }
+            }
+        }
+    }
+
+    fun stop() {
+        scanScope.cancelChildren()
+    }
+
+    fun clear() {
+        stop()
+        _compatibleAdvertisements.value = emptyList()
+        _incompatibleAdvertisements.value = emptyList()
+    }
+
+
+    fun connect(advertisement: PlatformAdvertisement) {
+        peripheralScope = CoroutineScope(Job())
+        // TODO: If input is now made, app will crash because peripheral can't be written to
+        _connectedPeripheral.value = peripheralScope.peripheral(advertisement) {
+            logging {
+                level = Data
+            }
+        }
+
+        connectedPeripheral.state.onEach { state ->
+            Log.i("Control/Peripheral", "Received state: $state")
+            if (state is Disconnected && state.status != null) {
+                try {
+                    Log.i("Control/Peripheral", "Attempting connection. ")
+                    //TODO: connect()
+                } catch (e: Exception) {
+                    Log.e("Control/Peripheral", e.toString())
+                    throw e
+                }
+                Log.v ("Control/Peripheral", "Waiting to reconnect")
+                delay(2.seconds) // Throttle reconnects so we don't hammer the system if connection immediately drops.
+            }
+        }.launchIn(viewModelScope).apply {
+            invokeOnCompletion { cause ->
+                Log.w("Control/Peripheral",  "$cause - Auto connector complete")
+            }
+        }
+
+        peripheralScope.launch {
+            try {
+                connectedPeripheral.connect()
+            } catch (e: Exception) {
+                Log.e("Control/Peripheral", e.toString())
+            }
+            setScanPane(false)
+
+            alarmArrayChar = characteristicOf(
+                service = LIGHT_SERVICE_UUID,
+                characteristic = ALARM_ARRAY_CHARACTERISTIC_UUID,
+            )
+            lightStateChar = characteristicOf(
+                service = LIGHT_SERVICE_UUID,
+                characteristic = LIGHT_STATE_CHARACTERISTIC_UUID,
+            )
+            timestampChar = characteristicOf(
+                service = LIGHT_SERVICE_UUID,
+                characteristic = TIMESTAMP_CHARACTERISTIC_UUID,
+            )
+
+            Log.d("Connect/Char", "Characteristic: ${alarmArrayChar.characteristicUuid}")
+            Log.d("Connect/Char", "Characteristic: ${lightStateChar.characteristicUuid}")
+            Log.d("Connect/Char", "Characteristic: ${timestampChar.characteristicUuid}")
+
+            var lightStateBytes = connectedPeripheral.read(lightStateChar)
+            var cw = lightStateBytes.get(0).toInt()
+            var ww = lightStateBytes.get(1).toInt()
+
+            Log.d("Connect/Char", "LightState on connect: $cw $ww")
+
+            _lightState.value = LightState(
+                intensity = (cw + ww) / 255.0 / 2,
+                cw_ww_balance = if (cw + ww != 0) cw / (cw + ww).toDouble() else 0.5
+            )
+
+            updateLightPeripheral()
+        }
+    }
+
+    private suspend fun updateLightPeripheral() {
+        var cw = (255.0 * 2 * lightState.value.intensity * lightState.value.cw_ww_balance).coerceIn(
+            0.0,
+            255.0
+        ).toInt().toByte()
+        var ww =
+            (255.0 * 2 * lightState.value.intensity * (1 - lightState.value.cw_ww_balance)).coerceIn(
+                0.0,
+                255.0
+            ).toInt().toByte()
+        if (!isPeripheralConnected || !peripheralScope.isActive) return
+        connectedPeripheral.write(lightStateChar, byteArrayOf(cw, ww))
+    }
+
+    fun setIntensity(intensity: Double) {
+        _lightState.value = _lightState.value.copy(intensity = intensity)
+        if (isPeripheralConnected) {
+            peripheralScope.launch {
+                updateLightPeripheral()
+            }
+        }
+    }
+
+    fun setCW_WW_Balance(cw_ww_balance: Double) {
+        _lightState.value = _lightState.value.copy(cw_ww_balance = cw_ww_balance)
+        if (isPeripheralConnected) {
+            peripheralScope.launch {
+                updateLightPeripheral()
+            }
+        }
+    }
+
+
+    fun onScanPaneClicked() {
+        if (isPeripheralConnected && !uiState.value.scanPaneExpanded) {
+            peripheralScope.launch {
+                connectedPeripheral.disconnect()
+                _connectedPeripheral.value = null
+            }
+        }
+        setScanPane(!uiState.value.scanPaneExpanded)
     }
 }
 
-data class ControlsScreenState (
-    val connected: Boolean = false,
-    val intensity: Float = .3f,
-    val cw_ww_balance: Float = .5f,
+val scanner = Scanner {
+    logging {
+        level = Events
+    }
+    filters {
+    }
+}
+
+
+sealed class ScanStatus {
+    object Stopped : ScanStatus()
+    object Scanning : ScanStatus()
+    data class Failed(val message: CharSequence) : ScanStatus()
+}
+
+data class LightState (
+    val intensity: Double = .3,
+    val cw_ww_balance: Double = .5,
 )
+
+data class ControlsScreenState (
+    val scanPaneExpanded: Boolean = false,
+)
+
+fun CoroutineScope.childScope() =
+    CoroutineScope(coroutineContext + Job(coroutineContext[Job]))
+
+fun CoroutineScope.cancelChildren(
+    cause: CancellationException? = null
+) = coroutineContext[Job]?.cancelChildren(cause)

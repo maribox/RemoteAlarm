@@ -4,18 +4,15 @@ import android.Manifest.permission.ACCESS_COARSE_LOCATION
 import android.Manifest.permission.ACCESS_FINE_LOCATION
 import android.Manifest.permission.BLUETOOTH_CONNECT
 import android.Manifest.permission.BLUETOOTH_SCAN
-import android.R.attr.angle
 import android.os.Build.VERSION.SDK_INT
 import android.os.Build.VERSION_CODES.P
 import android.os.Build.VERSION_CODES.R
 import android.util.Log
 import android.view.MotionEvent
-import android.view.Surface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Arrangement.Center
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,26 +21,20 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBackIosNew
+import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.LocationDisabled
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -58,11 +49,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Alignment.Companion.CenterHorizontally
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -86,6 +75,7 @@ import com.juul.kable.Bluetooth
 import com.juul.kable.Bluetooth.Availability.Available
 import com.juul.kable.Bluetooth.Availability.Unavailable
 import it.bosler.remotealarm.ui.viewmodel.ControlViewModel
+import it.bosler.remotealarm.ui.viewmodel.ScanStatus.Scanning
 import kotlin.math.*
 
 
@@ -95,28 +85,29 @@ fun ControlScreen(
     viewModel: ControlViewModel = viewModel(),
 ) {
     val bluetooth = Bluetooth.availability.collectAsState(initial = null).value
-    val state by viewModel.state.collectAsState()
-    var scanPaneExpanded by remember { mutableStateOf(false) }
+    val state by viewModel.lightState.collectAsState()
+    var scanPaneExpanded = viewModel.uiState.collectAsState().value.scanPaneExpanded
     Box(Modifier.fillMaxSize()) {
         Box(Modifier
-            .fillMaxHeight(if (scanPaneExpanded) .9f else .3f)
+            .fillMaxHeight(if (scanPaneExpanded) .9f else .2f)
             .fillMaxWidth()
             .zIndex(1f)) {
-            ScanPane(bluetooth, scanPaneExpanded, { scanPaneExpanded = it })
+            ScanPane(viewModel, bluetooth)
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier
-            .fillMaxSize()
-            .zIndex(0f)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(0f)) {
             Spacer(Modifier.weight(.3f))
             Row(Modifier
-                .weight(.6f)) {
+                .weight(.7f)) {
                 Box(Modifier
                     .height(500.dp)
                     .width(500.dp), contentAlignment = Alignment.Center) {
                     Box(
                         modifier = Modifier
                             .clip(CircleShape)
-                            .clickable(onClick = { viewModel.setIntensity(if (state.intensity == 0f) 1f else 0f) })
+                            .clickable(onClick = { viewModel.setIntensity(if (state.intensity == 0.0) 1.0 else 0.0) })
                             .padding(50.dp)
                     ) {
                         Text(
@@ -125,8 +116,8 @@ fun ControlScreen(
                         )
                     }
                     CircularSlider(
-                        value = state.intensity,
-                        onValueChange = { viewModel.setIntensity(it) },
+                        value = state.intensity.toFloat(),
+                        onValueChange = { viewModel.setIntensity(it.toDouble()) },
                         progressColor = Color(0xf0f5b21e),
                         backgroundColor = Color(0xff14314d),
                         thumbColor = Color.Transparent,
@@ -138,17 +129,18 @@ fun ControlScreen(
             }
             Box(Modifier
                 .weight(.1f)
-                .fillMaxWidth(), contentAlignment = Alignment.Center) {
+                .fillMaxWidth()
+                , contentAlignment = Alignment.Center) {
                 GradientSlider(
-                    value = state.cw_ww_balance,
-                    onValueChange = { viewModel.setCW_WW_Balance(it) },
+                    value = state.cw_ww_balance.toFloat(),
+                    onValueChange = { viewModel.setCW_WW_Balance(it.toDouble()) },
                     gradient = Brush.horizontalGradient(
                         colors = listOf(
                             Color(0xFFFFF9FD),
                             Color(0xFFFFB46B),
                         )
                     ),
-                    thumbColor = Color.DarkGray,
+                    thumbColor = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.width(333.dp)
                 )
             }
@@ -159,9 +151,8 @@ fun ControlScreen(
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 private fun ScanPane(
+    viewModel: ControlViewModel,
     bluetooth: Bluetooth.Availability?,
-    scanPaneExpanded: Boolean,
-    onExpandToggle: (Boolean) -> Unit
 ) {
     ProvideTextStyle(
         TextStyle(color = contentColorFor(backgroundColor = Color.Cyan))
@@ -177,7 +168,7 @@ private fun ScanPane(
         }
 
         if (permissionsState.allPermissionsGranted) {
-            PermissionGranted(bluetooth, scanPaneExpanded, onExpandToggle)
+            PermissionGranted(viewModel, bluetooth)
         } else {
             if (permissionsState.shouldShowRationale) {
                 BluetoothPermissionsNotGranted(permissionsState)
@@ -192,19 +183,26 @@ private fun ScanPane(
 
 @Composable
 private fun PermissionGranted(
+    viewModel: ControlViewModel,
     bluetooth: Bluetooth.Availability?,
-    scanPaneExpanded: Boolean,
-    onExpandToggle: (Boolean) -> Unit,
-    connectionState: Boolean = true
 ) {
     var collapsedCardHeight by remember { mutableStateOf(0.dp) }
+    val scanPaneExpanded = viewModel.uiState.collectAsState().value.scanPaneExpanded
     val density = LocalDensity.current
     when (bluetooth) {
         Available -> {
-            OutlinedCard(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            LaunchedEffect(scanPaneExpanded) {
+                if (scanPaneExpanded) {
+                    viewModel.start()
+                }
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = (if (scanPaneExpanded) Arrangement.Top else Arrangement.Center),
                 modifier = Modifier
                     .padding(16.dp)
                     .fillMaxSize()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                     .onGloballyPositioned {
                         if (!scanPaneExpanded) {
                             collapsedCardHeight = with(density) {
@@ -213,64 +211,86 @@ private fun PermissionGranted(
                         }
                     }) {
                 Row(Modifier
+                    .clickable { viewModel.onScanPaneClicked() }
                     .padding(16.dp)
+                    .height(collapsedCardHeight - 32.dp)
                     .fillMaxWidth()) {
-                    Column(Modifier.weight(.85f)) {
-                        Box(Modifier.height(collapsedCardHeight - 32.dp)) {
-                            Card(modifier = Modifier.fillMaxSize()) {
-                                // show current connection status, name, and indicator light (green, yellow or red)
-                                Column (verticalArrangement = Arrangement.SpaceAround, modifier = Modifier.fillMaxSize().padding(8.dp)) {
-                                    if (!connectionState) {
-                                        Text("Connecting...", fontSize = 20.sp)
-                                        Spacer(Modifier.height(8.dp))
-                                    }
-                                    Row(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(8.dp),
-                                        horizontalArrangement = Arrangement.SpaceEvenly,
-                                        verticalAlignment = Alignment.CenterVertically) {
-                                        Text("Device Name", fontSize = 20.sp)
-                                        Box(
-                                            Modifier
-                                                .size(50.dp)
-                                                .clip(CircleShape)
-                                                .background(Color.Green)
-                                                .fillMaxWidth(),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text("Indicator Light", fontSize = 20.sp)
-                                        }
+                        Box(modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)) {
+                            // show current connection status, name, and indicator light (green, yellow or red)
+                            Column (verticalArrangement = Arrangement.SpaceAround, modifier = Modifier
+                                .fillMaxSize()
+                                .padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                /*if (!connectionState) {
+                                    Text("Connecting...", fontSize = 20.sp)
+                                    Spacer(Modifier.height(8.dp))
+                                }*/
+                                Row(Modifier
+                                    .width(200.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                    .padding(8.dp),
+                                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    Text(viewModel.connectedPeripheralFlow.collectAsState().value?.name ?: "Not Connected", fontSize = 20.sp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Box(
+                                        Modifier
+                                            .size(30.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (viewModel.connectedPeripheralFlow.collectAsState().value == null)
+                                                    Color.Gray
+                                                else
+                                                    Color.Green
+                                            )
+                                            .fillMaxWidth(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Filled.BluetoothSearching, contentDescription = "Connection Indicator", tint = MaterialTheme.colorScheme.onBackground)
                                     }
                                 }
                             }
-                        }
-                        if (scanPaneExpanded) {
-                            Column {
-
-                            }
-                        }
                     }
-                    Column(
-                        Modifier
-                            .clickable { onExpandToggle(!scanPaneExpanded) }
-                            .weight(.15f)
-                            .fillMaxHeight(),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            Icons.Filled.ArrowBackIosNew,
-                            contentDescription = "Toggle Scan Pane",
-                            modifier = Modifier
-                                .offset(
-                                    x = 8.dp,
-                                    y = ((collapsedCardHeight- 30.dp - 32.dp) / 2), // -30 because of the icon itself and -32 because of padding
-                                )
-                                .height(30.dp)
-                                .rotate(if (scanPaneExpanded) 90f else 270f)
-                        )
+                }
+                if (scanPaneExpanded) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Top,
+                        modifier = Modifier.fillMaxSize().padding(8.dp)) {
+                        if (viewModel.status.collectAsState().value == Scanning) {
+                            Loading()
+                        }
+                        viewModel.compatibleAdvertisements.collectAsState().value.forEach {
+                            Box (
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.fillMaxWidth().height(50.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                    .clickable(onClick = { viewModel.connect(it) })
+                            ) {
+                                Text(fontSize = 20.sp, text = "${it.name}")
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        Text("Other devices found:")
+                        viewModel.incompatibleAdvertisements.collectAsState().value.forEach {
+                            Box (
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.fillMaxWidth().height(50.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            ) {
+                                Text(color = Color.Gray, fontSize = 20.sp, text = "${it.name}")
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
                     }
                 }
             }
         }
 
+        // TODO following stuff should be moved into card
         is Unavailable -> {
             LaunchedEffect(Unit) {
                 Log.d("ControlScreen", "Bluetooth unavailable")
@@ -285,10 +305,9 @@ private fun PermissionGranted(
 private fun Loading() {
     Column(
         Modifier
-            .fillMaxSize()
             .padding(20.dp),
-        horizontalAlignment = CenterHorizontally,
-        verticalArrangement = Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
         CircularProgressIndicator()
     }
@@ -355,8 +374,8 @@ private fun ActionRequired(
         Modifier
             .fillMaxSize()
             .padding(20.dp),
-        horizontalAlignment = CenterHorizontally,
-        verticalArrangement = Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
         Icon(
             modifier = Modifier.size(150.dp),
@@ -368,7 +387,7 @@ private fun ActionRequired(
         Text(
             modifier = Modifier
                 .fillMaxWidth()
-                .align(CenterHorizontally),
+                .align(Alignment.CenterHorizontally),
             textAlign = TextAlign.Center,
             text = description,
         )
