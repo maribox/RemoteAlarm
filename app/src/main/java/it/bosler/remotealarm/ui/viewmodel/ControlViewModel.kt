@@ -32,6 +32,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.TimeUnit
+import kotlin.math.round
 
 private val SCAN_DURATION_MILLIS = TimeUnit.SECONDS.toMillis(10)
 
@@ -206,18 +207,23 @@ class ControlViewModel () : ViewModel() {
     }
 
     private suspend fun updateLightPeripheral() {
-        var cw = (255.0 * 2 * lightState.value.intensity * lightState.value.cw_ww_balance).coerceIn(
-            0.0,
-            255.0
-        ).toInt().toByte()
-        var ww =
-            (255.0 * 2 * lightState.value.intensity * (1 - lightState.value.cw_ww_balance)).coerceIn(
-                0.0,
-                255.0
-            ).toInt().toByte()
+        _lightState.value.copy(cw_ww_balance = _lightState.value.cw_ww_balance.coerceIn(0.0, 1.0))
+        _lightState.value.copy(intensity = _lightState.value.intensity.coerceIn(0.0, 1.0))
+
+        var cw: Double
+        var ww: Double
+        if (lightState.value.cw_ww_balance >= 0.5) {
+            cw = _lightState.value.intensity
+            ww = (1 - lightState.value.cw_ww_balance) * _lightState.value.intensity * 2
+        } else {
+            cw = lightState.value.cw_ww_balance * _lightState.value.intensity * 2
+            ww = _lightState.value.intensity
+        }
+        var cwByte = round(cw * 255).coerceIn(0.0, 255.0).toInt().toByte()
+        var wwByte = round(ww * 255).coerceIn(0.0, 255.0).toInt().toByte()
         if (!isPeripheralConnected || !peripheralScope.isActive) return
         try {
-            connectedPeripheral.write(lightStateChar, byteArrayOf(cw, ww))
+            connectedPeripheral.write(lightStateChar, byteArrayOf(cwByte, wwByte))
         } catch (e: Exception) {
             Log.e("Control/Peripheral", "Writing to Peripheral failed. Disconnecting. Reason: $e")
             disconnectPeripheral()
