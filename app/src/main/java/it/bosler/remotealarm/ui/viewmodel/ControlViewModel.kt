@@ -43,7 +43,7 @@ private const val TIMESTAMP_CHARACTERISTIC_UUID = "ab110e08-d3bb-4c8c-87a7-51d70
 
 class ControlViewModel () : ViewModel() {
 
-    private val _uiState = MutableStateFlow(ControlsScreenState());
+    private val _uiState = MutableStateFlow(ControlsScreenState())
     val uiState : StateFlow<ControlsScreenState> = _uiState.asStateFlow()
 
     fun setScanPane(expanded: Boolean) {

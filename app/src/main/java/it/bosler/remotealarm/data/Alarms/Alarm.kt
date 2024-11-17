@@ -1,11 +1,13 @@
 package it.bosler.remotealarm.data.Alarms
 
 import it.bosler.remotealarm.R
+import java.time.Instant
 import java.time.LocalTime
+import java.time.ZonedDateTime
 
 sealed class Schedule {
     abstract val scheduleType: ScheduleType
-    data class SpecificTimestamp(val UTCtimestamp: Long) : Schedule() {
+    data class SpecificMoment(val time: ZonedDateTime) : Schedule() {
         override val scheduleType = ScheduleType.SpecificTimestamp
     }
     data class WeekdaysWithLocalTime(val days: List<Days>, val time: LocalTime) : Schedule() {
@@ -20,7 +22,7 @@ enum class ScheduleType (val uiNameResId: Int) {
 
 data class Alarm(
     val id: Int = 0,
-    val schedule: Schedule = Schedule.SpecificTimestamp(0),
+    val schedule: Schedule = Schedule.SpecificMoment(ZonedDateTime.now()),
     var enabled: Boolean = true,
 )
 

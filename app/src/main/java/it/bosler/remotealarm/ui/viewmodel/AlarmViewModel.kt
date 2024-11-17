@@ -1,65 +1,91 @@
 package it.bosler.remotealarm.ui.viewmodel
 
+import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import it.bosler.remotealarm.data.Alarms.Alarm
 import it.bosler.remotealarm.data.Alarms.Schedule
-import it.bosler.remotealarm.data.Alarms.ScheduleType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.time.LocalTime
+import java.time.Instant
+import java.time.ZonedDateTime
 
-class AlarmViewModel (
+class AlarmViewModel(
     //private val dao: AlarmDAO
 ) : ViewModel() {
-    private val _state = MutableStateFlow(AlarmsScreenState());
-    val state : StateFlow<AlarmsScreenState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(AlarmsScreenState())
+    val state: StateFlow<AlarmsScreenState> = _state.asStateFlow()
 
-    var alarms : MutableList<Alarm> = mutableListOf();
+    var alarms: MutableList<Alarm> = mutableListOf()
 
     // Events
     fun toggleAlarm(alarm: Alarm) {
-        println(alarms)
-        val index = alarms.indexOfFirst { it == alarm }
-        if (index != -1) {
-            alarms[index] = alarms[index].copy(enabled = !alarms[index].enabled)
+        val updatedAlarms = _state.value.alarms.map {
+            if (it == alarm) it.copy(enabled = !it.enabled) else it
         }
-        _state.value = _state.value.copy(alarms = alarms.toList())
+        _state.value = _state.value.copy(alarms = updatedAlarms)
     }
 
-    fun changeCurrentAlarmType(scheduleType: ScheduleType) {
-        val newSchedule = when(scheduleType) {
-            ScheduleType.SpecificTimestamp -> Schedule.SpecificTimestamp(0)
+    /*fun changeCurrentAlarmType(scheduleType: ScheduleType) {
+        val newSchedule = when (scheduleType) {
+            ScheduleType.SpecificTimestamp -> Schedule.SpecificMoment(Instant.now())
             ScheduleType.WeekdaysWithLocalTime -> Schedule.WeekdaysWithLocalTime(listOf(), LocalTime.now())
         }
-        _state.value = _state.value.copy(currentEditedAlarm = _state.value.currentEditedAlarm!!.copy(schedule = newSchedule))
-    }
+        _state.value = _state.value.copy(
+            currentEditedAlarm = _state.value.currentEditedAlarm!!.copy(schedule = newSchedule)
+        )
+    }*/
 
     fun openNewAlarm() {
-        _state.value =  _state.value.copy(isAlarmEditOpen = true)
-        _state.value =  _state.value.copy(currentEditedAlarm = Alarm(alarms.size, schedule = Schedule.SpecificTimestamp(0)))
+        _state.value = _state.value.copy(isAlarmEditOpen = true)
+
+        val dateTimeIn8h = ZonedDateTime.now().plusHours(8)
+        val dateUTCPlusOffsetMillis = (dateTimeIn8h.toEpochSecond() + dateTimeIn8h.offset.totalSeconds)*1000
+        changeCurrentAlarmTime(dateTimeIn8h.hour, dateTimeIn8h.minute)
+        changeCurrentAlarmDateUTC(dateUTCPlusOffsetMillis)
     }
 
     fun closeCurrentAlarm() {
-        // TODO: Save to database
-        _state.value =  _state.value.copy(isAlarmEditOpen = false)
-        _state.value =  _state.value.copy(currentEditedAlarm = Alarm())
+        _state.value = _state.value.copy(isAlarmEditOpen = false)
     }
 
     fun saveCurrentAlarm() {
-        alarms.add(_state.value.currentEditedAlarm!!)
-        _state.value = _state.value.copy(alarms = alarms.toList())
-        closeCurrentAlarm()
+        val updatedAlarms = _state.value.alarms.toMutableList()
+        val now = ZonedDateTime.now()
+        val moment = ZonedDateTime.ofInstant(Instant.ofEpochMilli(_state.value.dateStartUTC + now.offset.totalSeconds), now.zone)
+            .withHour(_state.value.hour)
+            .withMinute(_state.value.minute)
+
+        if (moment.isBefore(now)) {
+            //toast that the alarm is in the past
+            _state.value = _state.value.copy(errorMessage = "Alarm is in the past")
+        } else {
+            updatedAlarms.add(
+                Alarm(schedule = Schedule.SpecificMoment(moment))
+            )
+            _state.value = _state.value.copy(alarms = updatedAlarms)
+            closeCurrentAlarm()
+        }
     }
 
-    fun enableCurrentAlarm(checked: Boolean) {
-        _state.value = _state.value.copy(currentEditedAlarm = _state.value.currentEditedAlarm!!.copy(enabled = checked))
+    fun clearError() {
+        _state.value = _state.value.copy(errorMessage = null)
     }
 
+    fun changeCurrentAlarmDateUTC(dateStartUTC: Long) {
+        _state.value = _state.value.copy(dateStartUTC=dateStartUTC)
+    }
+
+    fun changeCurrentAlarmTime(hour: Int, minute: Int) {
+        _state.value = _state.value.copy(hour=hour, minute=minute)
+    }
 }
 
 data class AlarmsScreenState(
     val alarms: List<Alarm> = emptyList(),
     val isAlarmEditOpen: Boolean = false,
-    val currentEditedAlarm: Alarm? = null,
+    val dateStartUTC: Long = 0,
+    val hour: Int = 0,
+    val minute: Int = 0,
+    val errorMessage : String? = null
 )
