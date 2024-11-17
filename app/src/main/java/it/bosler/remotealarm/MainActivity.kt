@@ -18,6 +18,11 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.lifecycle.viewmodel.compose.viewModel
+import it.bosler.remotealarm.ui.viewmodel.BluetoothViewModel
+import it.bosler.remotealarm.ui.viewmodel.ControlViewModel
+//import it.bosler.remotealarm.ui.viewmodel.ControlViewModelFactory
 import java.util.Scanner
 
 class MainActivity : ComponentActivity() {
@@ -41,6 +46,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContent {
             RemoteAlarmApp()
         }

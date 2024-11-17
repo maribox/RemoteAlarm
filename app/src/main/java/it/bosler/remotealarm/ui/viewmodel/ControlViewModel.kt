@@ -2,6 +2,7 @@ package it.bosler.remotealarm.ui.viewmodel
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.benasher44.uuid.uuidFrom
 import com.juul.kable.Characteristic
@@ -32,6 +33,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.TimeUnit
+import kotlin.math.max
 import kotlin.math.round
 
 private val SCAN_DURATION_MILLIS = TimeUnit.SECONDS.toMillis(10)
@@ -42,7 +44,19 @@ private const val ALARM_ARRAY_CHARACTERISTIC_UUID = "a14af994-2a22-4762-b9e5-cb1
 private const val LIGHT_STATE_CHARACTERISTIC_UUID = "3c95cda9-7bde-471d-9c2b-ac0364befa78"
 private const val TIMESTAMP_CHARACTERISTIC_UUID = "ab110e08-d3bb-4c8c-87a7-51d7076218cf"
 
+/*class ControlViewModelFactory(private val bluetoothViewModel: BluetoothViewModel) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        return ControlViewModel(bluetoothViewModel) as T
+    }
+}*/
+
 class ControlViewModel () : ViewModel() {
+
+    init {
+        println("ControlViewModel created")
+        //println(bluetoothViewModel.test)
+    }
 
     private val _uiState = MutableStateFlow(ControlsScreenState())
     val uiState : StateFlow<ControlsScreenState> = _uiState.asStateFlow()
@@ -189,17 +203,33 @@ class ControlViewModel () : ViewModel() {
             var ww = 0
             try {
                 var lightStateBytes = connectedPeripheral.read(lightStateChar)
-                cw = lightStateBytes.get(0).toUByte().toInt()
-                ww = lightStateBytes.get(1).toUByte().toInt()
+                cw = lightStateBytes[0].toUByte().toInt()
+                ww = lightStateBytes[1].toUByte().toInt()
             } catch (e: Exception) {
                 Log.e("Control/Peripheral", "Reading from Peripheral failed. Reason: $e")
             }
 
             Log.d("Connect/Char", "LightState on connect: $cw $ww")
 
+            val intensity = (max(cw, ww).toDouble()/255).coerceIn(0.0, 1.0)
+            val balance = (if (cw == 0 && ww == 0) {
+                0.5
+            } else if (cw == 0) {
+                1.0
+            } else if (ww == 0) {
+                0.0
+            } else {
+                if (cw >= ww)
+                    ww.toDouble() / cw * 0.5
+                else
+                    (-cw).toDouble()/255/2 + 1.0
+            }).coerceIn(0.0, 1.0)
+
+            Log.d("Connect/Char", "Updated intensity/balance to: $intensity $balance")
+
             _lightState.value = LightState(
-                intensity = (cw + ww) / 255.0 / 2,
-                cw_ww_balance = if (cw + ww != 0) cw / (cw + ww).toDouble() else 0.5
+                intensity = intensity,
+                cw_ww_balance = balance
             )
 
             updateLightPeripheral()
@@ -212,11 +242,11 @@ class ControlViewModel () : ViewModel() {
 
         var cw: Double
         var ww: Double
-        if (lightState.value.cw_ww_balance >= 0.5) {
+        if (lightState.value.cw_ww_balance < 0.5) {
             cw = _lightState.value.intensity
-            ww = (1 - lightState.value.cw_ww_balance) * _lightState.value.intensity * 2
+            ww = lightState.value.cw_ww_balance * 2 * _lightState.value.intensity
         } else {
-            cw = lightState.value.cw_ww_balance * _lightState.value.intensity * 2
+            cw = (1 - lightState.value.cw_ww_balance) * 2 * _lightState.value.intensity
             ww = _lightState.value.intensity
         }
         var cwByte = round(cw * 255).coerceIn(0.0, 255.0).toInt().toByte()
@@ -287,7 +317,7 @@ sealed class ScanStatus {
 
 data class LightState (
     val intensity: Double = .3,
-    val cw_ww_balance: Double = .5,
+    val cw_ww_balance: Double = .5, // cw = 0, ww = 1
 )
 
 data class ControlsScreenState (
