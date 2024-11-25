@@ -4,6 +4,7 @@ import android.Manifest.permission.ACCESS_COARSE_LOCATION
 import android.Manifest.permission.ACCESS_FINE_LOCATION
 import android.Manifest.permission.BLUETOOTH_CONNECT
 import android.Manifest.permission.BLUETOOTH_SCAN
+import android.R.attr.text
 import android.os.Build.VERSION.SDK_INT
 import android.os.Build.VERSION_CODES.P
 import android.os.Build.VERSION_CODES.R
@@ -75,15 +76,15 @@ import com.juul.kable.Bluetooth
 import com.juul.kable.Bluetooth.Availability.Available
 import com.juul.kable.Bluetooth.Availability.Unavailable
 import com.juul.kable.State
+import it.bosler.remotealarm.bluetooth.ScanStatus.Scanning
 import it.bosler.remotealarm.ui.viewmodel.ControlViewModel
-import it.bosler.remotealarm.ui.viewmodel.ScanStatus.Scanning
 import kotlin.math.*
 
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun ControlScreen(
-    viewModel: ControlViewModel = viewModel(),
+    viewModel: ControlViewModel,
 ) {
     val bluetooth = Bluetooth.availability.collectAsState(initial = null).value
     val state by viewModel.lightState.collectAsState()
@@ -194,7 +195,7 @@ private fun PermissionGranted(
         Available -> {
             LaunchedEffect(scanPaneExpanded) {
                 if (scanPaneExpanded) {
-                    viewModel.start()
+                    viewModel.startScan()
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally,
@@ -234,7 +235,7 @@ private fun PermissionGranted(
                                     .padding(8.dp),
                                     horizontalArrangement = Arrangement.SpaceEvenly,
                                     verticalAlignment = Alignment.CenterVertically) {
-                                    var (text, color) = when (viewModel.connectionState.collectAsState().value) {
+                                    var (text, color) = when (viewModel.connectionState?.collectAsState()?.value ?: State.Disconnected(null)) {
                                         is State.Disconnected ->  "Disconnected" to Color.Gray
                                         is State.Connecting -> "Connecting..." to Color.Yellow
                                         is State.Connected ->  (viewModel.connectedPeripheralFlow.collectAsState().value?.name?: "Connected") to Color.Green
