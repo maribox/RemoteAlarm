@@ -2,6 +2,9 @@ package it.bosler.remotealarm.ui.viewmodel
 
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.CreationExtras
+import it.bosler.remotealarm.bluetooth.BluetoothManager
 import it.bosler.remotealarm.data.Alarms.Alarm
 import it.bosler.remotealarm.data.Alarms.Schedule
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,7 +15,26 @@ import java.time.ZonedDateTime
 
 class AlarmViewModel(
     //private val dao: AlarmDAO
+    bluetoothManager: BluetoothManager
 ) : ViewModel() {
+
+    companion object {
+        fun get_factory(bluetoothManager: BluetoothManager) = object : ViewModelProvider.Factory
+        {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(
+                modelClass: Class<T>,
+                extras: CreationExtras
+            ): T {
+                if (modelClass.isAssignableFrom(AlarmViewModel::class.java)) {
+                    @Suppress("UNCHECKED_CAST")
+                    return AlarmViewModel(bluetoothManager) as T
+                }
+                throw IllegalArgumentException("Unknown ViewModel class")
+            }
+        }
+    }
+
     private val _state = MutableStateFlow(AlarmsScreenState())
     val state: StateFlow<AlarmsScreenState> = _state.asStateFlow()
 

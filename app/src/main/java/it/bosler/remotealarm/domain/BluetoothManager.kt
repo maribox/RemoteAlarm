@@ -1,5 +1,6 @@
 package it.bosler.remotealarm.bluetooth
 
+import android.service.autofill.Validators.or
 import android.util.Log
 import com.benasher44.uuid.uuidFrom
 import com.juul.kable.*
@@ -21,11 +22,9 @@ private const val LIGHT_STATE_CHARACTERISTIC_UUID = "3c95cda9-7bde-471d-9c2b-ac0
 private const val TIMESTAMP_CHARACTERISTIC_UUID = "ab110e08-d3bb-4c8c-87a7-51d7076218cf"
 
 class BluetoothManager {
-
     init {
         println("BluetoothManager created")
     }
-
 
     private val _connectedPeripheral = MutableStateFlow<Peripheral?>(null)
     val connectedPeripheralFlow: StateFlow<Peripheral?> = _connectedPeripheral.asStateFlow()
@@ -68,7 +67,7 @@ class BluetoothManager {
         }
     }
 
-    fun startScanning() {
+    fun startScanning(autoConnect: Boolean = false) {
         if (_status.value == ScanStatus.Scanning) return // Scan already in progress.
         _status.value = ScanStatus.Scanning
 
@@ -84,6 +83,11 @@ class BluetoothManager {
                                 Log.v("BluetoothManager/Advertisements", "Found compatible device ${advertisement.name}")
                                 foundCompatible[advertisement.address] = advertisement
                                 _compatibleAdvertisements.value = foundCompatible.values.toList()
+                                if (autoConnect) {
+                                    if (connectionState == null || connectionState?.value is State.Disconnected) {
+                                        connect(advertisement)
+                                    }
+                                }
                                 return@collect
                             }
                         }
@@ -211,6 +215,7 @@ class BluetoothManager {
     }
 
     private suspend fun updateLightPeripheral() {
+        Log.v("BluetoothManager/LightState", "Updated light peripheral")
         _lightState.value = _lightState.value.copy(
             cw_ww_balance = _lightState.value.cw_ww_balance.coerceIn(0.0, 1.0),
             intensity = _lightState.value.intensity.coerceIn(0.0, 1.0)
@@ -243,6 +248,7 @@ class BluetoothManager {
     }
 
     suspend fun setIntensity(intensity: Double) {
+        Log.v("BluetoothManager/LightState", "Setting intensity to $intensity")
         _lightState.value = _lightState.value.copy(intensity = intensity)
         if (isPeripheralConnected) {
             updateLightPeripheral()
@@ -250,6 +256,7 @@ class BluetoothManager {
     }
 
     suspend fun setCW_WW_Balance(cw_ww_balance: Double) {
+        Log.v("BluetoothManager/LightState", "Setting balance to $cw_ww_balance")
         _lightState.value = _lightState.value.copy(cw_ww_balance = cw_ww_balance)
         if (isPeripheralConnected) {
             updateLightPeripheral()
@@ -264,6 +271,6 @@ sealed class ScanStatus {
 }
 
 data class LightState(
-    val intensity: Double = .3,
+    val intensity: Double = .5,
     val cw_ww_balance: Double = .5, // cw = 0, ww = 1
 )

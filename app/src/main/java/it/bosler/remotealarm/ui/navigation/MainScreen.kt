@@ -2,7 +2,6 @@ package it.bosler.remotealarm.ui.navigation
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -14,7 +13,7 @@ import it.bosler.remotealarm.ui.screens.AlarmsScreen
 import it.bosler.remotealarm.ui.screens.ConnectionsScreen
 import it.bosler.remotealarm.ui.screens.ControlScreen
 import it.bosler.remotealarm.ui.screens.SettingsScreen
-import it.bosler.remotealarm.ui.viewmodel.BluetoothViewModel
+import it.bosler.remotealarm.ui.viewmodel.AlarmViewModel
 import it.bosler.remotealarm.ui.viewmodel.ControlViewModel
 
 @Composable
@@ -23,8 +22,12 @@ fun MainScreen(
     modifier: Modifier = Modifier,
 ) {
     val bluetoothManager = remember {BluetoothManager()}
-    val factory = remember {ControlViewModel.get_factory(bluetoothManager)}
-    val controlViewModel : ControlViewModel = viewModel(factory = factory)
+    val controlFactory = remember {ControlViewModel.get_factory(bluetoothManager)}
+    val controlViewModel : ControlViewModel = viewModel(factory = controlFactory)
+
+    val alarmFactory = remember {AlarmViewModel.get_factory(bluetoothManager)}
+    val alarmViewModel : AlarmViewModel = viewModel(factory = alarmFactory)
+
 
     Box(modifier) {
         NavHost(navController = navController, startDestination = ScreenType.Control.route) {
@@ -32,7 +35,7 @@ fun MainScreen(
                 ControlScreen(controlViewModel)
             }
             composable(ScreenType.Alarms.route) {
-                AlarmsScreen()
+                AlarmsScreen(alarmViewModel)
             }
             composable(ScreenType.Connections.route) {
                 ConnectionsScreen()

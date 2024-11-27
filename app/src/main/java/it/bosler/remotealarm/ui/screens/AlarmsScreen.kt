@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
+import it.bosler.remotealarm.bluetooth.BluetoothManager
 import it.bosler.remotealarm.ui.components.AlarmCardList
 import it.bosler.remotealarm.ui.viewmodel.AlarmViewModel
 import it.bosler.remotealarm.ui.viewmodel.AlarmsScreenState
@@ -63,7 +64,7 @@ import java.util.Date
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AlarmsScreen(
-    viewModel: AlarmViewModel = viewModel(),
+    viewModel: AlarmViewModel,
 ) {
     val state by viewModel.state.collectAsState()
     Box(modifier = Modifier.fillMaxSize()) {
@@ -90,7 +91,7 @@ fun AlarmsScreen(
 @Composable
 @Preview
 private fun AlarmFormPreview() {
-    val viewModel = AlarmViewModel()
+    val viewModel = AlarmViewModel(BluetoothManager())
     viewModel.openNewAlarm()
     var viewModelState by remember { mutableStateOf(viewModel.state.value) }
     AlarmForm(viewModelState, viewModel)
@@ -122,6 +123,8 @@ object PresentOrFutureSelectableDates: SelectableDates {
     }
 }
 
+//TODO: Try to use ZonedDateTime as unified state for date and time
+// (if date is modified, set date to the selected date and time to the current time, if time is modified, set only the time)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AlarmForm(

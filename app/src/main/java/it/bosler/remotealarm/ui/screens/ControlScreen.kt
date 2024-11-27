@@ -4,7 +4,6 @@ import android.Manifest.permission.ACCESS_COARSE_LOCATION
 import android.Manifest.permission.ACCESS_FINE_LOCATION
 import android.Manifest.permission.BLUETOOTH_CONNECT
 import android.Manifest.permission.BLUETOOTH_SCAN
-import android.R.attr.text
 import android.os.Build.VERSION.SDK_INT
 import android.os.Build.VERSION_CODES.P
 import android.os.Build.VERSION_CODES.R
@@ -89,6 +88,12 @@ fun ControlScreen(
     val bluetooth = Bluetooth.availability.collectAsState(initial = null).value
     val state by viewModel.lightState.collectAsState()
     var scanPaneExpanded = viewModel.uiState.collectAsState().value.scanPaneExpanded
+
+    LaunchedEffect(Unit) {
+        Log.d("ControlScreen", "Tried to connect")
+        viewModel.tryConnect()
+    }
+
     Box(Modifier.fillMaxSize()) {
         Box(Modifier
             .fillMaxHeight(if (scanPaneExpanded) .9f else .2f)
@@ -109,7 +114,9 @@ fun ControlScreen(
                     Box(
                         modifier = Modifier
                             .clip(CircleShape)
-                            .clickable(onClick = { viewModel.setIntensity(if (state.intensity == 0.0) 1.0 else 0.0) })
+                            .clickable(onClick = {
+                                Log.v("ControlScreen/Intensity", "Setting intensity to ${if (state.intensity == 0.0) 1.0 else 0.0}")
+                                viewModel.setIntensity(if (state.intensity == 0.0) 1.0 else 0.0) })
                             .padding(50.dp)
                     ) {
                         Text(
@@ -119,10 +126,12 @@ fun ControlScreen(
                     }
                     CircularSlider(
                         value = state.intensity.toFloat(),
-                        onValueChange = { viewModel.setIntensity(it.toDouble()) },
+                        onValueChange = {
+                            Log.v("ControlScreen/CircularSlider", "Setting intensity to $it")
+                            viewModel.setIntensity(it.toDouble())
+                        },
                         progressColor = Color(0xf0f5b21e),
                         backgroundColor = Color(0xff14314d),
-                        thumbColor = Color.Transparent,
                         stroke = 30f,
                         touchStroke = 500f,
                         modifier = Modifier.fillMaxSize()
@@ -443,7 +452,6 @@ fun CustomSliderTrack(gradient: Brush, modifier: Modifier) {
     }
 }
 
-
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun CircularSlider(
@@ -453,37 +461,13 @@ fun CircularSlider(
     stroke: Float = 50f,
     cap: StrokeCap = StrokeCap.Round,
     touchStroke: Float = 50f,
-    thumbColor: Color = Color.Blue,
     progressColor: Color = Color.Black,
     backgroundColor: Color = Color.LightGray,
     onValueChange: ((Float) -> Unit)? = null
 ) {
-    var angle by remember { mutableStateOf(-60f) }
-    var last by remember { mutableStateOf(0f) }
     var radius by remember { mutableStateOf(0f) }
     var center by remember { mutableStateOf(Offset.Zero) }
 
-    var appliedAngle by remember { mutableStateOf(value * 300f) }
-    LaunchedEffect(key1 = value) {
-        appliedAngle = value * 300f
-    }
-
-    LaunchedEffect(key1 = angle) {
-        var a = angle
-        a += 60
-        if (a <= 0f) {
-            a += 360
-        }
-        a = a.coerceIn(0f, 300f)
-        if (last < 150f && a == 300f) {
-            a = 0f
-        }
-        last = a
-        appliedAngle = a
-    }
-    LaunchedEffect(key1 = appliedAngle) {
-        onValueChange?.invoke(appliedAngle / 300f)
-    }
     Canvas(
         modifier = modifier
             .onGloballyPositioned {
@@ -502,14 +486,14 @@ fun CircularSlider(
                         val d = distance(offset, center)
                         val a = angle(center, offset)
                         if (d >= radius - touchStroke / 2f && d <= radius + touchStroke / 2f && a !in -120f..-60f) {
-                            angle = a
+                            updateAngle(a, onValueChange)
                         } else {
                             return@pointerInteropFilter false
                         }
                     }
 
                     MotionEvent.ACTION_MOVE -> {
-                        angle = angle(center, offset)
+                        updateAngle(angle(center, offset), onValueChange)
                     }
 
                     else -> {
@@ -534,7 +518,7 @@ fun CircularSlider(
         drawArc(
             color = progressColor,
             startAngle = 120f,
-            sweepAngle = appliedAngle,
+            sweepAngle = value.coerceIn(0f, 1f) * 300f,
             topLeft = center - Offset(radius, radius),
             size = Size(radius * 2, radius * 2),
             useCenter = false,
@@ -543,15 +527,18 @@ fun CircularSlider(
                 cap = cap
             )
         )
-        drawCircle(
-            color = thumbColor,
-            radius = stroke,
-            center = center + Offset(
-                radius * cos((120 + appliedAngle) * PI / 180f).toFloat(),
-                radius * sin((120 + appliedAngle) * PI / 180f).toFloat()
-            )
-        )
     }
+}
+
+private fun updateAngle(
+    rawAngle: Float,
+    onValueChange: ((Float) -> Unit)?
+) {
+    var adjustedAngle = (rawAngle + 60).let {
+        if (it < -30f) it + 360 else it
+    }.coerceIn(0f, 300f)
+
+    onValueChange?.invoke(adjustedAngle / 300f)
 }
 
 fun angle(center: Offset, offset: Offset): Float {
@@ -566,4 +553,13 @@ fun distance(first: Offset, second: Offset): Float {
 
 fun Float.square(): Float {
     return this * this
+}
+
+fun angleBetween(center: Offset, point: Offset): Float {
+    val angle = Math.toDegrees(atan2(point.y - center.y, point.x - center.x).toDouble()).toFloat()
+    return angle
+}
+
+fun Float.normalizeAngle(): Float {
+    return (this + 360f) % 360f
 }

@@ -67,6 +67,10 @@ class ControlViewModel(
         bluetoothManager.clearScanResults()
     }
 
+    fun tryConnect() {
+        bluetoothManager.startScanning(true)
+    }
+
     fun connect(advertisement: PlatformAdvertisement) {
         bluetoothManager.connect(advertisement)
         setScanPane(false)
