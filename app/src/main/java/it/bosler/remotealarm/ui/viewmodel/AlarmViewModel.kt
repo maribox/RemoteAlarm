@@ -1,9 +1,9 @@
 package it.bosler.remotealarm.ui.viewmodel
 
-import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.CreationExtras
+import com.juul.kable.State
 import it.bosler.remotealarm.bluetooth.BluetoothManager
 import it.bosler.remotealarm.data.Alarms.Alarm
 import it.bosler.remotealarm.data.Alarms.Schedule
@@ -12,10 +12,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.time.Instant
 import java.time.ZonedDateTime
+import java.time.Duration
 
 class AlarmViewModel(
     //private val dao: AlarmDAO
-    bluetoothManager: BluetoothManager
+    private val bluetoothManager: BluetoothManager
 ) : ViewModel() {
 
     companion object {
@@ -82,6 +83,12 @@ class AlarmViewModel(
             //toast that the alarm is in the past
             _state.value = _state.value.copy(errorMessage = "Alarm is in the past")
         } else {
+            // upload to device
+            if (bluetoothManager.connectionState?.value == State.Connected) {
+                bluetoothManager.addAlarm(moment, _state.value.alarmAction)
+            }
+
+            // update local state
             updatedAlarms.add(
                 Alarm(schedule = Schedule.SpecificMoment(moment))
             )
@@ -101,13 +108,36 @@ class AlarmViewModel(
     fun changeCurrentAlarmTime(hour: Int, minute: Int) {
         _state.value = _state.value.copy(hour=hour, minute=minute)
     }
+
+    fun changeCurrentAlarmAction(hasRamp: Boolean = _state.value.alarmAction.hasRamp,
+                                 rampDuration: Duration = _state.value.alarmAction.rampDuration,
+                                 shouldBlink: Boolean = _state.value.alarmAction.shouldBlink,
+                                 blinkInterval: Duration = _state.value.alarmAction.blinkInterval,
+                                 blinkDuration: Duration = _state.value.alarmAction.blinkDuration,
+                                 targetIntensity: Double = _state.value.alarmAction.targetIntensity,
+                                 targetCW_WW_Balance: Double = _state.value.alarmAction.targetCW_WW_Balance) {
+        _state.value = _state.value.copy(alarmAction = AlarmAction(hasRamp, rampDuration, shouldBlink, blinkInterval, blinkDuration, targetIntensity, targetCW_WW_Balance))
+    }
 }
 
 data class AlarmsScreenState(
     val alarms: List<Alarm> = emptyList(),
     val isAlarmEditOpen: Boolean = false,
+
     val dateStartUTC: Long = 0,
     val hour: Int = 0,
     val minute: Int = 0,
+
+    val alarmAction : AlarmAction = AlarmAction(),
     val errorMessage : String? = null
+)
+
+data class AlarmAction(
+    val hasRamp: Boolean = false,
+    val rampDuration: Duration = Duration.ofSeconds(30),
+    val shouldBlink: Boolean = false,
+    val blinkInterval: Duration = Duration.ofSeconds(2),
+    val blinkDuration: Duration = Duration.ofMinutes(10),
+    val targetIntensity: Double = 0.0,
+    val targetCW_WW_Balance: Double = 0.0,
 )

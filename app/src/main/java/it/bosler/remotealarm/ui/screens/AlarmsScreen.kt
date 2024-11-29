@@ -1,5 +1,7 @@
 package it.bosler.remotealarm.ui.screens
 
+import android.annotation.SuppressLint
+import android.app.TimePickerDialog
 import android.icu.text.SimpleDateFormat
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -16,10 +18,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -54,6 +60,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import it.bosler.remotealarm.bluetooth.BluetoothManager
+import it.bosler.remotealarm.shared.MAX_COLOR_TEMP
+import it.bosler.remotealarm.shared.MIN_COLOR_TEMP
+import it.bosler.remotealarm.shared.formatTwoDigits
 import it.bosler.remotealarm.ui.components.AlarmCardList
 import it.bosler.remotealarm.ui.viewmodel.AlarmViewModel
 import it.bosler.remotealarm.ui.viewmodel.AlarmsScreenState
@@ -74,7 +83,6 @@ fun AlarmsScreen(
                 .align(Alignment.BottomEnd)
                 .padding(16.dp),
             onClick = {
-                println("Adding new alarm ${state.alarms.size}")
                 viewModel.openNewAlarm()
             },
             containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -125,15 +133,19 @@ object PresentOrFutureSelectableDates: SelectableDates {
 
 //TODO: Try to use ZonedDateTime as unified state for date and time
 // (if date is modified, set date to the selected date and time to the current time, if time is modified, set only the time)
+@SuppressLint("DefaultLocale")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AlarmForm(
     state: AlarmsScreenState,
     viewModel: AlarmViewModel
 ) {
-    var showDatePicker by remember { mutableStateOf(true) }
-    var showTimePicker by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(true) }
     val datePickerState = rememberDatePickerState(
+        // because of the following line, we are saving date separate in UTC and hour/minute until it is saved,
+        // at which point we don't need to get the start of this date in UTC...
+        // who thought of this API??
         initialSelectedDateMillis = state.dateStartUTC,
         selectableDates = PresentOrFutureSelectableDates)
     val timePickerState = rememberTimePickerState(state.hour, state.minute)
@@ -232,11 +244,88 @@ private fun AlarmForm(
                 .padding(16.dp)
                 .clickable { showTimePicker = true }) {
                 Text(
-                    "${timePickerState.hour}:${timePickerState.minute}",
+                    "${formatTwoDigits(timePickerState.hour)}:${formatTwoDigits(timePickerState.minute)}",
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = 50.sp),
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
             }
+
+            Spacer(modifier = Modifier.padding(32.dp))
+
+            LaunchedEffect(null) {
+                viewModel.changeCurrentAlarmAction(targetIntensity = 1.0, targetCW_WW_Balance = 0.5)
+            }
+
+            Row (modifier = Modifier.fillMaxWidth().height(100.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                Column(
+                    modifier = Modifier.weight(1f / 3),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(Color.Gray)
+                            .clickable { viewModel.changeCurrentAlarmAction(hasRamp = !state.alarmAction.hasRamp) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Timeline,
+                            contentDescription = "Ramp Icon",
+                            tint = if (state.alarmAction.hasRamp) Color.White else Color.LightGray
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Ramp")
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f / 3),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(Color.Blue)
+                            .clickable { viewModel.changeCurrentAlarmAction(targetIntensity = 1.5 - state.alarmAction.targetIntensity) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lightbulb,
+                            contentDescription = "Target Light Icon",
+                            tint = Color.White
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(String.format("%.0f%%", state.alarmAction.targetIntensity * 100))
+                    Text(String.format("%.0fK", (MAX_COLOR_TEMP - MIN_COLOR_TEMP)*state.alarmAction.targetCW_WW_Balance + MIN_COLOR_TEMP))
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f / 3),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(Color.Red)
+                            .clickable { viewModel.changeCurrentAlarmAction(shouldBlink = !state.alarmAction.shouldBlink) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = "Blinking Icon",
+                            tint = if (state.alarmAction.shouldBlink) Color.White else Color.LightGray
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Blinking")
+                }
+            }
+
+
             if (showDatePicker) {
                 DatePickerDialog(
                     onDismissRequest = { showDatePicker = false },

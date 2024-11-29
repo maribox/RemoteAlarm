@@ -28,7 +28,6 @@ fun MainScreen(
     val alarmFactory = remember {AlarmViewModel.get_factory(bluetoothManager)}
     val alarmViewModel : AlarmViewModel = viewModel(factory = alarmFactory)
 
-
     Box(modifier) {
         NavHost(navController = navController, startDestination = ScreenType.Control.route) {
             composable(ScreenType.Control.route) {

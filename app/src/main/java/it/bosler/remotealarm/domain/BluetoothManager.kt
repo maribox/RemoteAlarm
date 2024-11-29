@@ -7,8 +7,10 @@ import com.juul.kable.*
 import com.juul.kable.logs.Logging
 import com.juul.kable.logs.Logging.Level.Events
 import com.juul.kable.logs.Logging.Level.Warnings
+import it.bosler.remotealarm.ui.viewmodel.AlarmAction
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import java.time.ZonedDateTime
 import kotlin.math.max
 import kotlin.math.round
 import kotlin.system.exitProcess
@@ -26,6 +28,8 @@ class BluetoothManager {
         println("BluetoothManager created")
     }
 
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
     private val _connectedPeripheral = MutableStateFlow<Peripheral?>(null)
     val connectedPeripheralFlow: StateFlow<Peripheral?> = _connectedPeripheral.asStateFlow()
     private val connectedPeripheral: Peripheral?
@@ -35,8 +39,6 @@ class BluetoothManager {
 
     val connectionState : StateFlow<State>?
         get() = connectedPeripheral?.state
-
-    private lateinit var peripheralScope: CoroutineScope
 
     private lateinit var alarmArrayChar: Characteristic
     private lateinit var lightStateChar: Characteristic
@@ -80,6 +82,7 @@ class BluetoothManager {
                     .collect { advertisement ->
                         advertisement.uuids.forEach {
                             if (it == uuidFrom(LIGHT_SERVICE_UUID)) {
+                                // TODO why is this printed so often?
                                 Log.v("BluetoothManager/Advertisements", "Found compatible device ${advertisement.name}")
                                 foundCompatible[advertisement.address] = advertisement
                                 _compatibleAdvertisements.value = foundCompatible.values.toList()
@@ -115,10 +118,8 @@ class BluetoothManager {
         _incompatibleAdvertisements.value = emptyList()
     }
 
-    fun connect(advertisement: PlatformAdvertisement) {
-        peripheralScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-
-        _connectedPeripheral.value = peripheralScope.peripheral(advertisement) {
+    suspend fun connect(advertisement: PlatformAdvertisement) = coroutineScope {
+        _connectedPeripheral.value = scope.peripheral(advertisement) {
             logging {
                 level = Warnings
             }
@@ -126,19 +127,19 @@ class BluetoothManager {
 
         (connectedPeripheral ?: run {
             Log.e("BletoothManager/Peripheral", "Tried to connect to null peripheral")
-            return
+            return@coroutineScope
         }).state.onEach { state ->
             Log.i("BluetoothManager/State", "Received state: $state")
             if (state is State.Disconnected && state.status != null) {
                 disconnectPeripheral()
             }
-        }.launchIn(peripheralScope).apply {
+        }.launchIn(scope).apply {
             invokeOnCompletion { cause ->
                 Log.w("BluetoothManager/State", "$cause - Auto connector complete")
             }
         }
 
-        peripheralScope.launch {
+        scope.launch {
             try {
                 connectedPeripheral!!.connect()
                 initializeCharacteristics()
@@ -158,7 +159,7 @@ class BluetoothManager {
             Log.e("BluetoothManager/Peripheral", "Disconnecting from Peripheral failed. Reason: $e")
         }
         _connectedPeripheral.value = null
-        peripheralScope.cancel()
+        scope.cancel()
     }
 
     private fun initializeCharacteristics() {
@@ -215,7 +216,6 @@ class BluetoothManager {
     }
 
     private suspend fun updateLightPeripheral() {
-        Log.v("BluetoothManager/LightState", "Updated light peripheral")
         _lightState.value = _lightState.value.copy(
             cw_ww_balance = _lightState.value.cw_ww_balance.coerceIn(0.0, 1.0),
             intensity = _lightState.value.intensity.coerceIn(0.0, 1.0)
@@ -223,7 +223,7 @@ class BluetoothManager {
 
         val (cwByte, wwByte) = calculateCW_WW_Bytes()
 
-        if (!isPeripheralConnected || !peripheralScope.isActive) return
+        if (!isPeripheralConnected || !scope.isActive) return
         try {
             connectedPeripheral!!.write(lightStateChar, byteArrayOf(cwByte, wwByte))
         } catch (e: Exception) {
@@ -256,11 +256,14 @@ class BluetoothManager {
     }
 
     suspend fun setCW_WW_Balance(cw_ww_balance: Double) {
-        Log.v("BluetoothManager/LightState", "Setting balance to $cw_ww_balance")
         _lightState.value = _lightState.value.copy(cw_ww_balance = cw_ww_balance)
         if (isPeripheralConnected) {
             updateLightPeripheral()
         }
+    }
+
+    fun addAlarm(moment: ZonedDateTime, action: AlarmAction) {
+        // TODO
     }
 }
 
