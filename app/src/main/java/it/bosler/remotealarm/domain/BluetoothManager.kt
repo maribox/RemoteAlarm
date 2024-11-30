@@ -1,19 +1,18 @@
 package it.bosler.remotealarm.bluetooth
 
-import android.service.autofill.Validators.or
 import android.util.Log
 import com.benasher44.uuid.uuidFrom
 import com.juul.kable.*
-import com.juul.kable.logs.Logging
 import com.juul.kable.logs.Logging.Level.Events
 import com.juul.kable.logs.Logging.Level.Warnings
+import it.bosler.remotealarm.shared.toBytes
 import it.bosler.remotealarm.ui.viewmodel.AlarmAction
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.time.ZonedDateTime
+import kotlin.isInitialized
 import kotlin.math.max
 import kotlin.math.round
-import kotlin.system.exitProcess
 
 private const val SCAN_DURATION_MILLIS = 10_000L // 10 seconds
 
@@ -89,6 +88,7 @@ class BluetoothManager {
                                 if (autoConnect) {
                                     if (connectionState == null || connectionState?.value is State.Disconnected) {
                                         connect(advertisement)
+                                        cancel()
                                     }
                                 }
                                 return@collect
@@ -118,7 +118,7 @@ class BluetoothManager {
         _incompatibleAdvertisements.value = emptyList()
     }
 
-    suspend fun connect(advertisement: PlatformAdvertisement) = coroutineScope {
+    fun connect(advertisement: PlatformAdvertisement) {
         _connectedPeripheral.value = scope.peripheral(advertisement) {
             logging {
                 level = Warnings
@@ -127,7 +127,7 @@ class BluetoothManager {
 
         (connectedPeripheral ?: run {
             Log.e("BletoothManager/Peripheral", "Tried to connect to null peripheral")
-            return@coroutineScope
+            return
         }).state.onEach { state ->
             Log.i("BluetoothManager/State", "Received state: $state")
             if (state is State.Disconnected && state.status != null) {
@@ -222,14 +222,8 @@ class BluetoothManager {
         )
 
         val (cwByte, wwByte) = calculateCW_WW_Bytes()
-
         if (!isPeripheralConnected || !scope.isActive) return
-        try {
-            connectedPeripheral!!.write(lightStateChar, byteArrayOf(cwByte, wwByte))
-        } catch (e: Exception) {
-            Log.e("BluetoothManager/Peripheral", "Writing to Peripheral failed. Disconnecting. Reason: $e")
-            disconnectPeripheral()
-        }
+        writeToPeripheral(byteArrayOf(cwByte, wwByte))
     }
 
     private fun calculateCW_WW_Bytes(): Pair<Byte, Byte> {
@@ -248,7 +242,6 @@ class BluetoothManager {
     }
 
     suspend fun setIntensity(intensity: Double) {
-        Log.v("BluetoothManager/LightState", "Setting intensity to $intensity")
         _lightState.value = _lightState.value.copy(intensity = intensity)
         if (isPeripheralConnected) {
             updateLightPeripheral()
@@ -263,7 +256,32 @@ class BluetoothManager {
     }
 
     fun addAlarm(moment: ZonedDateTime, action: AlarmAction) {
-        // TODO
+        syncTime()
+    }
+
+    @OptIn(ExperimentalStdlibApi::class)
+    fun syncTime() {
+        val timestamp = ZonedDateTime.now().toEpochSecond();
+        val timestampBytes = timestamp.toBytes()
+        Log.d("BluetoothManager/Char", "Syncing time: $timestamp with bytes: ${timestampBytes.toHexString()}")
+        writeToPeripheral(timestampBytes)
+    }
+
+    private fun writeToPeripheral(bytes: ByteArray) {
+        if (connectedPeripheral == null || !isPeripheralConnected) {
+            Log.e("BluetoothManager/Peripheral", "Peripheral not connected. Cannot write.")
+            return
+        }
+        connectedPeripheral?.let {
+            scope.launch {
+                try {
+                    it.write(timestampChar, bytes)
+                } catch (e: Exception) {
+                    Log.e("BluetoothManager/Peripheral", "Writing to Peripheral failed. Disconnecting. Reason: $e")
+                    disconnectPeripheral()
+                }
+            }
+        }
     }
 }
 

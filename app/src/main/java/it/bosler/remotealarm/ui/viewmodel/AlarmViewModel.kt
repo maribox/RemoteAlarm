@@ -1,5 +1,6 @@
 package it.bosler.remotealarm.ui.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.CreationExtras
@@ -86,6 +87,7 @@ class AlarmViewModel(
             // upload to device
             if (bluetoothManager.connectionState?.value == State.Connected) {
                 bluetoothManager.addAlarm(moment, _state.value.alarmAction)
+                Log.d("AlarmViewModel", "Alarm added to device")
             }
 
             // update local state

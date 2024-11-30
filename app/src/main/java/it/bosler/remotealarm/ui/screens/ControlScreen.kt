@@ -115,7 +115,6 @@ fun ControlScreen(
                         modifier = Modifier
                             .clip(CircleShape)
                             .clickable(onClick = {
-                                Log.v("ControlScreen/Intensity", "Setting intensity to ${if (state.intensity == 0.0) 1.0 else 0.0}")
                                 viewModel.setIntensity(if (state.intensity == 0.0) 1.0 else 0.0) })
                             .padding(50.dp)
                     ) {
@@ -127,7 +126,6 @@ fun ControlScreen(
                     CircularSlider(
                         value = state.intensity.toFloat(),
                         onValueChange = {
-                            Log.v("ControlScreen/CircularSlider", "Setting intensity to $it")
                             viewModel.setIntensity(it.toDouble())
                         },
                         progressColor = Color(0xf0f5b21e),
