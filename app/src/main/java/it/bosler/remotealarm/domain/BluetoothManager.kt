@@ -1,4 +1,4 @@
-package it.bosler.remotealarm.bluetooth
+package it.bosler.remotealarm.domain
 
 import android.util.Log
 import com.benasher44.uuid.uuidFrom
@@ -7,10 +7,10 @@ import com.juul.kable.logs.Logging.Level.Events
 import com.juul.kable.logs.Logging.Level.Warnings
 import it.bosler.remotealarm.shared.toBytes
 import it.bosler.remotealarm.ui.viewmodel.AlarmAction
+import it.bosler.remotealarm.ui.viewmodel.toLightProgramBytes
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.time.ZonedDateTime
-import kotlin.isInitialized
 import kotlin.math.max
 import kotlin.math.round
 
@@ -159,7 +159,6 @@ class BluetoothManager {
             Log.e("BluetoothManager/Peripheral", "Disconnecting from Peripheral failed. Reason: $e")
         }
         _connectedPeripheral.value = null
-        scope.cancel()
     }
 
     private fun initializeCharacteristics() {
@@ -211,34 +210,40 @@ class BluetoothManager {
 
         _lightState.value = LightState(
             intensity = intensity,
-            cw_ww_balance = balance
+            colorTemperatureBalance = balance
         )
     }
 
-    private suspend fun updateLightPeripheral() {
+    private fun updateLightPeripheral() {
         _lightState.value = _lightState.value.copy(
-            cw_ww_balance = _lightState.value.cw_ww_balance.coerceIn(0.0, 1.0),
+            colorTemperatureBalance = _lightState.value.colorTemperatureBalance.coerceIn(0.0, 1.0),
             intensity = _lightState.value.intensity.coerceIn(0.0, 1.0)
         )
 
-        val (cwByte, wwByte) = calculateCW_WW_Bytes()
+        val (cwByte, wwByte) = calculateLightStateBytes()
         if (!isPeripheralConnected || !scope.isActive) return
-        writeToPeripheral(byteArrayOf(cwByte, wwByte))
+        writeToPeripheral(lightStateChar, byteArrayOf(cwByte, wwByte))
     }
 
-    private fun calculateCW_WW_Bytes(): Pair<Byte, Byte> {
-        val cw: Double
-        val ww: Double
-        if (_lightState.value.cw_ww_balance < 0.5) {
-            cw = _lightState.value.intensity
-            ww = _lightState.value.cw_ww_balance * 2 * _lightState.value.intensity
-        } else {
-            cw = (1 - _lightState.value.cw_ww_balance) * 2 * _lightState.value.intensity
-            ww = _lightState.value.intensity
+    private fun calculateLightStateBytes(): Pair<Byte, Byte> {
+        return calculateLightStateBytes(_lightState.value.colorTemperatureBalance, _lightState.value.intensity)
+    }
+
+    companion object {
+        fun calculateLightStateBytes(colorTemperatureBalance: Double, intensity: Double): Pair<Byte, Byte> {
+            val cw: Double
+            val ww: Double
+            if (colorTemperatureBalance < 0.5) {
+                cw = intensity
+                ww = colorTemperatureBalance * 2 * intensity
+            } else {
+                cw = (1 - colorTemperatureBalance) * 2 * intensity
+                ww = intensity
+            }
+            val cwByte = round(cw * 255).coerceIn(0.0, 255.0).toInt().toByte()
+            val wwByte = round(ww * 255).coerceIn(0.0, 255.0).toInt().toByte()
+            return cwByte to wwByte
         }
-        val cwByte = round(cw * 255).coerceIn(0.0, 255.0).toInt().toByte()
-        val wwByte = round(ww * 255).coerceIn(0.0, 255.0).toInt().toByte()
-        return cwByte to wwByte
     }
 
     suspend fun setIntensity(intensity: Double) {
@@ -248,8 +253,8 @@ class BluetoothManager {
         }
     }
 
-    suspend fun setCW_WW_Balance(cw_ww_balance: Double) {
-        _lightState.value = _lightState.value.copy(cw_ww_balance = cw_ww_balance)
+    suspend fun setColorTemperatureBalance(colorTemperatureBalance: Double) {
+        _lightState.value = _lightState.value.copy(colorTemperatureBalance = colorTemperatureBalance)
         if (isPeripheralConnected) {
             updateLightPeripheral()
         }
@@ -257,17 +262,21 @@ class BluetoothManager {
 
     fun addAlarm(moment: ZonedDateTime, action: AlarmAction) {
         syncTime()
+        var alarmBytes = moment.toEpochSecond().toBytes()
+        alarmBytes += action.toLightProgramBytes()
+        println(alarmBytes.size.toUShort().toBytes().toList())
+        writeToPeripheral(alarmArrayChar, alarmBytes.size.toUShort().toBytes() + alarmBytes)
     }
 
     @OptIn(ExperimentalStdlibApi::class)
     fun syncTime() {
-        val timestamp = ZonedDateTime.now().toEpochSecond();
+        val timestamp = ZonedDateTime.now().toEpochSecond()
         val timestampBytes = timestamp.toBytes()
         Log.d("BluetoothManager/Char", "Syncing time: $timestamp with bytes: ${timestampBytes.toHexString()}")
-        writeToPeripheral(timestampBytes)
+        writeToPeripheral(timestampChar, timestampBytes)
     }
 
-    private fun writeToPeripheral(bytes: ByteArray) {
+    private fun writeToPeripheral(characteristic: Characteristic, bytes: ByteArray) {
         if (connectedPeripheral == null || !isPeripheralConnected) {
             Log.e("BluetoothManager/Peripheral", "Peripheral not connected. Cannot write.")
             return
@@ -275,7 +284,7 @@ class BluetoothManager {
         connectedPeripheral?.let {
             scope.launch {
                 try {
-                    it.write(timestampChar, bytes)
+                    it.write(characteristic, bytes)
                 } catch (e: Exception) {
                     Log.e("BluetoothManager/Peripheral", "Writing to Peripheral failed. Disconnecting. Reason: $e")
                     disconnectPeripheral()
@@ -293,5 +302,5 @@ sealed class ScanStatus {
 
 data class LightState(
     val intensity: Double = .5,
-    val cw_ww_balance: Double = .5, // cw = 0, ww = 1
+    val colorTemperatureBalance: Double = .5, // cw = 0, ww = 1
 )

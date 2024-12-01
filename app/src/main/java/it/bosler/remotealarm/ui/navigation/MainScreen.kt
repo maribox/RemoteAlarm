@@ -8,7 +8,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import it.bosler.remotealarm.bluetooth.BluetoothManager
+import it.bosler.remotealarm.domain.BluetoothManager
 import it.bosler.remotealarm.ui.screens.AlarmsScreen
 import it.bosler.remotealarm.ui.screens.ConnectionsScreen
 import it.bosler.remotealarm.ui.screens.ControlScreen
@@ -22,10 +22,10 @@ fun MainScreen(
     modifier: Modifier = Modifier,
 ) {
     val bluetoothManager = remember {BluetoothManager()}
-    val controlFactory = remember {ControlViewModel.get_factory(bluetoothManager)}
+    val controlFactory = remember {ControlViewModel.getFactory(bluetoothManager)}
     val controlViewModel : ControlViewModel = viewModel(factory = controlFactory)
 
-    val alarmFactory = remember {AlarmViewModel.get_factory(bluetoothManager)}
+    val alarmFactory = remember {AlarmViewModel.getFactory(bluetoothManager)}
     val alarmViewModel : AlarmViewModel = viewModel(factory = alarmFactory)
 
     Box(modifier) {

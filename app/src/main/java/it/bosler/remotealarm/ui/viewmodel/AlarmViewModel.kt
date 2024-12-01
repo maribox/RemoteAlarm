@@ -5,9 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.juul.kable.State
-import it.bosler.remotealarm.bluetooth.BluetoothManager
+import it.bosler.remotealarm.domain.BluetoothManager
 import it.bosler.remotealarm.data.Alarms.Alarm
 import it.bosler.remotealarm.data.Alarms.Schedule
+import it.bosler.remotealarm.shared.toBytes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,7 +22,7 @@ class AlarmViewModel(
 ) : ViewModel() {
 
     companion object {
-        fun get_factory(bluetoothManager: BluetoothManager) = object : ViewModelProvider.Factory
+        fun getFactory(bluetoothManager: BluetoothManager) = object : ViewModelProvider.Factory
         {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(
@@ -113,12 +114,13 @@ class AlarmViewModel(
 
     fun changeCurrentAlarmAction(hasRamp: Boolean = _state.value.alarmAction.hasRamp,
                                  rampDuration: Duration = _state.value.alarmAction.rampDuration,
+                                 targetDuration: Duration = _state.value.alarmAction.targetDuration,
                                  shouldBlink: Boolean = _state.value.alarmAction.shouldBlink,
                                  blinkInterval: Duration = _state.value.alarmAction.blinkInterval,
                                  blinkDuration: Duration = _state.value.alarmAction.blinkDuration,
                                  targetIntensity: Double = _state.value.alarmAction.targetIntensity,
-                                 targetCW_WW_Balance: Double = _state.value.alarmAction.targetCW_WW_Balance) {
-        _state.value = _state.value.copy(alarmAction = AlarmAction(hasRamp, rampDuration, shouldBlink, blinkInterval, blinkDuration, targetIntensity, targetCW_WW_Balance))
+                                 colorTemperatureBalance: Double = _state.value.alarmAction.colorTemperatureBalance) {
+        _state.value = _state.value.copy(alarmAction = AlarmAction(hasRamp, rampDuration, targetDuration, shouldBlink, blinkInterval, blinkDuration, targetIntensity, colorTemperatureBalance))
     }
 }
 
@@ -137,9 +139,43 @@ data class AlarmsScreenState(
 data class AlarmAction(
     val hasRamp: Boolean = false,
     val rampDuration: Duration = Duration.ofSeconds(30),
+    val targetDuration: Duration = Duration.ofSeconds(30), // duration after which blinking should start or alarm should turn off
     val shouldBlink: Boolean = false,
     val blinkInterval: Duration = Duration.ofSeconds(2),
     val blinkDuration: Duration = Duration.ofMinutes(10),
     val targetIntensity: Double = 0.0,
-    val targetCW_WW_Balance: Double = 0.0,
+    val colorTemperatureBalance: Double = 0.0,
 )
+
+enum class LightProgramTypes(val value: Byte) {
+    FIXED(0),
+    RAMP(1),
+    BLINK(2),
+}
+
+fun AlarmAction.toLightProgramBytes(): ByteArray {
+    val byteList = mutableListOf<Byte>()
+
+    if (hasRamp) {
+        byteList.add(LightProgramTypes.RAMP.value)
+        byteList.addAll(rampDuration.toMillis().toBytes().toList())
+        val (cw, ww) = BluetoothManager.calculateLightStateBytes(targetIntensity, colorTemperatureBalance)
+        byteList.addAll(listOf(cw, ww))
+    }
+
+    byteList.add(LightProgramTypes.FIXED.value)
+    byteList.addAll(targetDuration.toMillis().toBytes().toList())
+    val (cw, ww) = BluetoothManager.calculateLightStateBytes(targetIntensity, colorTemperatureBalance)
+    byteList.addAll(listOf(cw, ww))
+
+    if (shouldBlink) {
+        byteList.add(LightProgramTypes.BLINK.value)
+        byteList.addAll(blinkDuration.toMillis().toBytes().toList())
+        byteList.addAll(blinkInterval.toMillis().toBytes().toList())
+        val (cwHigh, wwHigh) = BluetoothManager.calculateLightStateBytes(targetIntensity, colorTemperatureBalance)
+        val (cwLow, wwLow) = BluetoothManager.calculateLightStateBytes(0.0, 0.0)
+        byteList.addAll(listOf(cwHigh, wwHigh, cwLow, wwLow))
+    }
+    return byteList.toByteArray()
+}
+

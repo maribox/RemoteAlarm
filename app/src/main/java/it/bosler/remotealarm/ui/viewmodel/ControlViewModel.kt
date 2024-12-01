@@ -1,19 +1,13 @@
 package it.bosler.remotealarm.ui.viewmodel
 
-import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
-import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.juul.kable.PlatformAdvertisement
-import it.bosler.remotealarm.bluetooth.BluetoothManager
-import it.bosler.remotealarm.bluetooth.LightState
-import it.bosler.remotealarm.bluetooth.ScanStatus
+import it.bosler.remotealarm.domain.BluetoothManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.juul.kable.State
 
@@ -26,7 +20,7 @@ class ControlViewModel(
     }
 
     companion object {
-        fun get_factory(bluetoothManager: BluetoothManager) = object : ViewModelProvider.Factory
+        fun getFactory(bluetoothManager: BluetoothManager) = object : ViewModelProvider.Factory
         {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(
@@ -88,9 +82,9 @@ class ControlViewModel(
         }
     }
 
-    fun setCW_WW_Balance(cw_ww_balance: Double) {
+    fun setColorTemperatureBalance(colorTemperatureBalance: Double) {
         viewModelScope.launch {
-            bluetoothManager.setCW_WW_Balance(cw_ww_balance)
+            bluetoothManager.setColorTemperatureBalance(colorTemperatureBalance)
         }
     }
 

@@ -1,7 +1,6 @@
 package it.bosler.remotealarm.ui.screens
 
 import android.annotation.SuppressLint
-import android.app.TimePickerDialog
 import android.icu.text.SimpleDateFormat
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -58,8 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.lifecycle.viewmodel.compose.viewModel
-import it.bosler.remotealarm.bluetooth.BluetoothManager
+import it.bosler.remotealarm.domain.BluetoothManager
 import it.bosler.remotealarm.shared.MAX_COLOR_TEMP
 import it.bosler.remotealarm.shared.MIN_COLOR_TEMP
 import it.bosler.remotealarm.shared.formatTwoDigits
@@ -253,7 +251,7 @@ private fun AlarmForm(
             Spacer(modifier = Modifier.padding(32.dp))
 
             LaunchedEffect(null) {
-                viewModel.changeCurrentAlarmAction(targetIntensity = 1.0, targetCW_WW_Balance = 0.5)
+                viewModel.changeCurrentAlarmAction(targetIntensity = 1.0, colorTemperatureBalance = 0.5)
             }
 
             Row (modifier = Modifier.fillMaxWidth().height(100.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
@@ -299,7 +297,7 @@ private fun AlarmForm(
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(String.format("%.0f%%", state.alarmAction.targetIntensity * 100))
-                    Text(String.format("%.0fK", (MAX_COLOR_TEMP - MIN_COLOR_TEMP)*state.alarmAction.targetCW_WW_Balance + MIN_COLOR_TEMP))
+                    Text(String.format("%.0fK", (MAX_COLOR_TEMP - MIN_COLOR_TEMP)*state.alarmAction.colorTemperatureBalance + MIN_COLOR_TEMP))
                 }
 
                 Column(

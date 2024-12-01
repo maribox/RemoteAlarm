@@ -67,7 +67,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
@@ -75,7 +74,7 @@ import com.juul.kable.Bluetooth
 import com.juul.kable.Bluetooth.Availability.Available
 import com.juul.kable.Bluetooth.Availability.Unavailable
 import com.juul.kable.State
-import it.bosler.remotealarm.bluetooth.ScanStatus.Scanning
+import it.bosler.remotealarm.domain.ScanStatus.Scanning
 import it.bosler.remotealarm.ui.viewmodel.ControlViewModel
 import kotlin.math.*
 
@@ -141,8 +140,8 @@ fun ControlScreen(
                 .fillMaxWidth()
                 , contentAlignment = Alignment.Center) {
                 GradientSlider(
-                    value = state.cw_ww_balance.toFloat(),
-                    onValueChange = { viewModel.setCW_WW_Balance(it.toDouble()) },
+                    value = state.colorTemperatureBalance.toFloat(),
+                    onValueChange = { viewModel.setColorTemperatureBalance(it.toDouble()) },
                     gradient = Brush.horizontalGradient(
                         colors = listOf(
                             Color(0xFFFFF9FD),
