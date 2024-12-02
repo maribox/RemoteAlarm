@@ -1,7 +1,7 @@
 package it.bosler.remotealarm.data.Alarms
 
 import it.bosler.remotealarm.R
-import java.time.Instant
+import it.bosler.remotealarm.ui.viewmodel.AlarmAction
 import java.time.LocalTime
 import java.time.ZonedDateTime
 
@@ -22,7 +22,8 @@ enum class ScheduleType (val uiNameResId: Int) {
 
 data class Alarm(
     val id: Int = 0,
-    val schedule: Schedule = Schedule.SpecificMoment(ZonedDateTime.now()),
     var enabled: Boolean = true,
+    val schedule: Schedule = Schedule.SpecificMoment(ZonedDateTime.now()),
+    val action : AlarmAction = AlarmAction(),
 )
 

@@ -80,21 +80,22 @@ class AlarmViewModel(
         val moment = ZonedDateTime.ofInstant(Instant.ofEpochMilli(_state.value.dateStartUTC + now.offset.totalSeconds), now.zone)
             .withHour(_state.value.hour)
             .withMinute(_state.value.minute)
+            .withSecond(0)
 
         if (moment.isBefore(now)) {
             //toast that the alarm is in the past
             _state.value = _state.value.copy(errorMessage = "Alarm is in the past")
         } else {
             // upload to device
+            val alarm = Alarm(schedule = Schedule.SpecificMoment(moment), action = _state.value.alarmAction)
             if (bluetoothManager.connectionState?.value == State.Connected) {
-                bluetoothManager.addAlarm(moment, _state.value.alarmAction)
+                bluetoothManager.addAlarm(alarm)
                 Log.d("AlarmViewModel", "Alarm added to device")
             }
 
             // update local state
-            updatedAlarms.add(
-                Alarm(schedule = Schedule.SpecificMoment(moment))
-            )
+            // TODO: fetch from remote
+            updatedAlarms.add(alarm)
             _state.value = _state.value.copy(alarms = updatedAlarms)
             closeCurrentAlarm()
         }
@@ -120,7 +121,9 @@ class AlarmViewModel(
                                  blinkDuration: Duration = _state.value.alarmAction.blinkDuration,
                                  targetIntensity: Double = _state.value.alarmAction.targetIntensity,
                                  colorTemperatureBalance: Double = _state.value.alarmAction.colorTemperatureBalance) {
-        _state.value = _state.value.copy(alarmAction = AlarmAction(hasRamp, rampDuration, targetDuration, shouldBlink, blinkInterval, blinkDuration, targetIntensity, colorTemperatureBalance))
+        _state.value = _state.value.copy(alarmAction = AlarmAction(hasRamp = hasRamp, rampDuration = rampDuration,
+            targetDuration = targetDuration, shouldBlink = shouldBlink, blinkInterval = blinkInterval,
+            blinkDuration = blinkDuration, targetIntensity = targetIntensity, colorTemperatureBalance = colorTemperatureBalance))
     }
 }
 
@@ -131,8 +134,8 @@ data class AlarmsScreenState(
     val dateStartUTC: Long = 0,
     val hour: Int = 0,
     val minute: Int = 0,
-
     val alarmAction : AlarmAction = AlarmAction(),
+
     val errorMessage : String? = null
 )
 

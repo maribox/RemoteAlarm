@@ -1,12 +1,17 @@
 package it.bosler.remotealarm.domain
 
+import android.R.attr.action
 import android.util.Log
 import com.benasher44.uuid.uuidFrom
 import com.juul.kable.*
 import com.juul.kable.logs.Logging.Level.Events
 import com.juul.kable.logs.Logging.Level.Warnings
+import it.bosler.remotealarm.data.Alarms.Alarm
+import it.bosler.remotealarm.data.Alarms.Schedule.SpecificMoment
+import it.bosler.remotealarm.data.Alarms.Schedule.WeekdaysWithLocalTime
+import it.bosler.remotealarm.data.Alarms.ScheduleType
 import it.bosler.remotealarm.shared.toBytes
-import it.bosler.remotealarm.ui.viewmodel.AlarmAction
+import it.bosler.remotealarm.shared.toFormattedHex
 import it.bosler.remotealarm.ui.viewmodel.toLightProgramBytes
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -123,6 +128,9 @@ class BluetoothManager {
             logging {
                 level = Warnings
             }
+            onServicesDiscovered {
+                requestMtu(512)
+            }
         }
 
         (connectedPeripheral ?: run {
@@ -226,11 +234,11 @@ class BluetoothManager {
     }
 
     private fun calculateLightStateBytes(): Pair<Byte, Byte> {
-        return calculateLightStateBytes(_lightState.value.colorTemperatureBalance, _lightState.value.intensity)
+        return calculateLightStateBytes(_lightState.value.intensity, _lightState.value.colorTemperatureBalance)
     }
 
     companion object {
-        fun calculateLightStateBytes(colorTemperatureBalance: Double, intensity: Double): Pair<Byte, Byte> {
+        fun calculateLightStateBytes(intensity: Double, colorTemperatureBalance: Double): Pair<Byte, Byte> {
             val cw: Double
             val ww: Double
             if (colorTemperatureBalance < 0.5) {
@@ -260,19 +268,26 @@ class BluetoothManager {
         }
     }
 
-    fun addAlarm(moment: ZonedDateTime, action: AlarmAction) {
+    @OptIn(ExperimentalStdlibApi::class)
+    fun addAlarm(alarm: Alarm) {
         syncTime()
-        var alarmBytes = moment.toEpochSecond().toBytes()
-        alarmBytes += action.toLightProgramBytes()
-        println(alarmBytes.size.toUShort().toBytes().toList())
-        writeToPeripheral(alarmArrayChar, alarmBytes.size.toUShort().toBytes() + alarmBytes)
+        var alarmBytes : ByteArray = byteArrayOf()
+        if (alarm.schedule is SpecificMoment) {
+            alarmBytes += alarm.schedule.time.toEpochSecond().toBytes()
+            alarmBytes += alarm.action.toLightProgramBytes()
+            writeToPeripheral(alarmArrayChar, alarmBytes)
+        } else if (alarm.schedule is WeekdaysWithLocalTime) {
+            throw NotImplementedError("WeekdaysWithLocalTime not implemented yet")
+        }
+        println("Sent ${alarmBytes.size} bytes")
+        println("Sent bytes: ${alarmBytes.toFormattedHex()}")
     }
 
     @OptIn(ExperimentalStdlibApi::class)
     fun syncTime() {
         val timestamp = ZonedDateTime.now().toEpochSecond()
         val timestampBytes = timestamp.toBytes()
-        Log.d("BluetoothManager/Char", "Syncing time: $timestamp with bytes: ${timestampBytes.toHexString()}")
+        Log.d("BluetoothManager/Char", "Syncing time: $timestamp with bytes: ${timestampBytes.toFormattedHex()}")
         writeToPeripheral(timestampChar, timestampBytes)
     }
 

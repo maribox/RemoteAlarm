@@ -16,3 +16,11 @@ fun Long.toBytes(): ByteArray {
 fun UShort.toBytes(): ByteArray {
     return ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(this.toShort()).array()
 }
+
+@OptIn(ExperimentalStdlibApi::class)
+fun ByteArray.toFormattedHex(): String {
+    return this.toHexString(format = HexFormat {
+        upperCase = true
+        bytes { bytesPerGroup = 1; groupSeparator = " ";  }
+    })
+}
