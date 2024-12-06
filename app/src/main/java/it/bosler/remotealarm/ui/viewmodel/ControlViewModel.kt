@@ -94,7 +94,7 @@ class ControlViewModel(
     }
 
     fun onScanPaneClicked() {
-        if (connectedPeripheralFlow.value != null && !uiState.value.scanPaneExpanded) {
+        if (connectedPeripheralFlow.value != null && !uiState.value.scanPaneExpanded && bluetoothManager.connectionState?.value == State.Connected) {
             disconnect()
         }
         setScanPane(!uiState.value.scanPaneExpanded)

@@ -17,6 +17,11 @@ fun UShort.toBytes(): ByteArray {
     return ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(this.toShort()).array()
 }
 
+fun Short.toBytes(): ByteArray {
+    return ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(this).array()
+}
+
+
 @OptIn(ExperimentalStdlibApi::class)
 fun ByteArray.toFormattedHex(): String {
     return this.toHexString(format = HexFormat {

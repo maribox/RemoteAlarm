@@ -129,8 +129,6 @@ object PresentOrFutureSelectableDates: SelectableDates {
     }
 }
 
-//TODO: Try to use ZonedDateTime as unified state for date and time
-// (if date is modified, set date to the selected date and time to the current time, if time is modified, set only the time)
 @SuppressLint("DefaultLocale")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

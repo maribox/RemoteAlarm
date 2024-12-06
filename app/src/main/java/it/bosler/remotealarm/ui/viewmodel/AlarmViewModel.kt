@@ -117,12 +117,12 @@ class AlarmViewModel(
                                  rampDuration: Duration = _state.value.alarmAction.rampDuration,
                                  targetDuration: Duration = _state.value.alarmAction.targetDuration,
                                  shouldBlink: Boolean = _state.value.alarmAction.shouldBlink,
-                                 blinkInterval: Duration = _state.value.alarmAction.blinkInterval,
+                                 blinkInterval: Duration = _state.value.alarmAction.blinkPeriodLength,
                                  blinkDuration: Duration = _state.value.alarmAction.blinkDuration,
                                  targetIntensity: Double = _state.value.alarmAction.targetIntensity,
                                  colorTemperatureBalance: Double = _state.value.alarmAction.colorTemperatureBalance) {
         _state.value = _state.value.copy(alarmAction = AlarmAction(hasRamp = hasRamp, rampDuration = rampDuration,
-            targetDuration = targetDuration, shouldBlink = shouldBlink, blinkInterval = blinkInterval,
+            targetDuration = targetDuration, shouldBlink = shouldBlink, blinkPeriodLength = blinkInterval,
             blinkDuration = blinkDuration, targetIntensity = targetIntensity, colorTemperatureBalance = colorTemperatureBalance))
     }
 }
@@ -139,15 +139,17 @@ data class AlarmsScreenState(
     val errorMessage : String? = null
 )
 
-data class AlarmAction(
-    val hasRamp: Boolean = false,
+data class AlarmAction (
+    val hasRamp: Boolean = true,
     val rampDuration: Duration = Duration.ofSeconds(30),
+
     val targetDuration: Duration = Duration.ofSeconds(30), // duration after which blinking should start or alarm should turn off
-    val shouldBlink: Boolean = false,
-    val blinkInterval: Duration = Duration.ofSeconds(2),
-    val blinkDuration: Duration = Duration.ofMinutes(10),
     val targetIntensity: Double = 0.0,
     val colorTemperatureBalance: Double = 0.0,
+
+    val shouldBlink: Boolean = true,
+    val blinkPeriodLength: Duration = Duration.ofSeconds(2),
+    val blinkDuration: Duration = Duration.ofMinutes(10),
 )
 
 enum class LightProgramTypes(val value: Byte) {
@@ -173,8 +175,10 @@ fun AlarmAction.toLightProgramBytes(): ByteArray {
 
     if (shouldBlink) {
         byteList.add(LightProgramTypes.BLINK.value)
-        byteList.addAll(blinkDuration.toMillis().toBytes().toList())
-        byteList.addAll(blinkInterval.toMillis().toBytes().toList())
+        byteList.addAll((blinkDuration.toMillis()).toBytes().toList())
+        val highLowDurationBytes = (blinkPeriodLength.toMillis()/2).coerceIn(0, UShort.MAX_VALUE.toLong()).toUShort().toBytes().toList()
+        byteList.addAll(highLowDurationBytes)
+        byteList.addAll(highLowDurationBytes)
         val (cwHigh, wwHigh) = BluetoothManager.calculateLightStateBytes(targetIntensity, colorTemperatureBalance)
         val (cwLow, wwLow) = BluetoothManager.calculateLightStateBytes(0.0, 0.0)
         byteList.addAll(listOf(cwHigh, wwHigh, cwLow, wwLow))

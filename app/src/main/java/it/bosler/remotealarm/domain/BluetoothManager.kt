@@ -44,9 +44,9 @@ class BluetoothManager {
     val connectionState : StateFlow<State>?
         get() = connectedPeripheral?.state
 
-    private lateinit var alarmArrayChar: Characteristic
-    private lateinit var lightStateChar: Characteristic
-    private lateinit var timestampChar: Characteristic
+    private var alarmArrayChar: Characteristic? = null
+    private var lightStateChar: Characteristic? = null
+    private var timestampChar: Characteristic? = null
 
     private val _lightState = MutableStateFlow(LightState())
     val lightState: StateFlow<LightState> = _lightState.asStateFlow()
@@ -183,16 +183,16 @@ class BluetoothManager {
             characteristic = TIMESTAMP_CHARACTERISTIC_UUID,
         )
 
-        Log.d("BluetoothManager/Char", "Characteristic: ${alarmArrayChar.characteristicUuid}")
-        Log.d("BluetoothManager/Char", "Characteristic: ${lightStateChar.characteristicUuid}")
-        Log.d("BluetoothManager/Char", "Characteristic: ${timestampChar.characteristicUuid}")
+        Log.d("BluetoothManager/Char", "Characteristic: ${alarmArrayChar?.characteristicUuid}")
+        Log.d("BluetoothManager/Char", "Characteristic: ${lightStateChar?.characteristicUuid}")
+        Log.d("BluetoothManager/Char", "Characteristic: ${timestampChar?.characteristicUuid}")
     }
 
     private suspend fun readInitialLightState() {
         var cw = 0
         var ww = 0
         try {
-            val lightStateBytes = connectedPeripheral!!.read(lightStateChar)
+            val lightStateBytes = connectedPeripheral!!.read(lightStateChar!!)
             cw = lightStateBytes[0].toUByte().toInt()
             ww = lightStateBytes[1].toUByte().toInt()
         } catch (e: Exception) {
@@ -229,8 +229,8 @@ class BluetoothManager {
         )
 
         val (cwByte, wwByte) = calculateLightStateBytes()
-        if (!isPeripheralConnected || !scope.isActive) return
-        writeToPeripheral(lightStateChar, byteArrayOf(cwByte, wwByte))
+        if (lightStateChar == null || !isPeripheralConnected || !scope.isActive) return
+        writeToPeripheral(lightStateChar!!, byteArrayOf(cwByte, wwByte))
     }
 
     private fun calculateLightStateBytes(): Pair<Byte, Byte> {
@@ -270,12 +270,16 @@ class BluetoothManager {
 
     @OptIn(ExperimentalStdlibApi::class)
     fun addAlarm(alarm: Alarm) {
+        if (alarmArrayChar == null) {
+            Log.e("BluetoothManager/Char", "AlarmArrayChar not initialized. Cannot write.")
+            return
+        }
         syncTime()
         var alarmBytes : ByteArray = byteArrayOf()
         if (alarm.schedule is SpecificMoment) {
             alarmBytes += alarm.schedule.time.toEpochSecond().toBytes()
             alarmBytes += alarm.action.toLightProgramBytes()
-            writeToPeripheral(alarmArrayChar, alarmBytes)
+            writeToPeripheral(alarmArrayChar!!, alarmBytes)
         } else if (alarm.schedule is WeekdaysWithLocalTime) {
             throw NotImplementedError("WeekdaysWithLocalTime not implemented yet")
         }
@@ -285,10 +289,14 @@ class BluetoothManager {
 
     @OptIn(ExperimentalStdlibApi::class)
     fun syncTime() {
+        if (timestampChar == null) {
+            Log.e("BluetoothManager/Char", "TimestampChar not initialized. Cannot write.")
+            return
+        }
         val timestamp = ZonedDateTime.now().toEpochSecond()
         val timestampBytes = timestamp.toBytes()
         Log.d("BluetoothManager/Char", "Syncing time: $timestamp with bytes: ${timestampBytes.toFormattedHex()}")
-        writeToPeripheral(timestampChar, timestampBytes)
+        writeToPeripheral(timestampChar!!, timestampBytes)
     }
 
     private fun writeToPeripheral(characteristic: Characteristic, bytes: ByteArray) {
