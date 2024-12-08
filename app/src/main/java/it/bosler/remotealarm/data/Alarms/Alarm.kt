@@ -25,5 +25,7 @@ data class Alarm(
     var enabled: Boolean = true,
     val schedule: Schedule = Schedule.SpecificMoment(ZonedDateTime.now()),
     val action : AlarmAction = AlarmAction(),
-)
+) {
+    companion object
+}
 

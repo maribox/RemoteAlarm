@@ -3,15 +3,20 @@ package it.bosler.remotealarm.ui.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.juul.kable.State
 import it.bosler.remotealarm.domain.BluetoothManager
 import it.bosler.remotealarm.data.Alarms.Alarm
 import it.bosler.remotealarm.data.Alarms.Schedule
+import it.bosler.remotealarm.domain.BluetoothManager.Companion.reverseLightStateBytes
 import it.bosler.remotealarm.shared.toBytes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.time.Instant
 import java.time.ZonedDateTime
 import java.time.Duration
@@ -41,7 +46,13 @@ class AlarmViewModel(
     private val _state = MutableStateFlow(AlarmsScreenState())
     val state: StateFlow<AlarmsScreenState> = _state.asStateFlow()
 
-    var alarms: MutableList<Alarm> = mutableListOf()
+    init {
+        viewModelScope.launch {
+            bluetoothManager.alarmFlow.collect {
+                _state.value = _state.value.copy(alarms = _state.value.alarms + it)
+            }
+        }
+    }
 
     // Events
     fun toggleAlarm(alarm: Alarm) {
@@ -95,8 +106,8 @@ class AlarmViewModel(
 
             // update local state
             // TODO: fetch from remote
-            updatedAlarms.add(alarm)
-            _state.value = _state.value.copy(alarms = updatedAlarms)
+            //updatedAlarms.add(alarm)
+            //_state.value = _state.value.copy(alarms = updatedAlarms)
             closeCurrentAlarm()
         }
     }
@@ -149,14 +160,67 @@ data class AlarmAction (
 
     val shouldBlink: Boolean = true,
     val blinkPeriodLength: Duration = Duration.ofSeconds(2),
-    val blinkDuration: Duration = Duration.ofMinutes(10),
-)
+    val blinkDuration: Duration = Duration.ofMinutes(60),
+) {
+    companion object
+}
 
 enum class LightProgramTypes(val value: Byte) {
     FIXED(0),
     RAMP(1),
     BLINK(2),
 }
+
+fun Alarm.Companion.fromLightProgramsBytes(bytes: ByteArray): Alarm {
+    val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+
+    // TODO: implement all alarms conversion
+    val schedule = Schedule.SpecificMoment(ZonedDateTime.ofInstant(Instant.ofEpochSecond(buffer.long),
+        ZonedDateTime.now().zone))
+
+    var hasRamp = false
+    var rampDuration = Duration.ZERO
+    var targetDuration = Duration.ZERO
+    var targetIntensity = 0.0
+    var colorTemperatureBalance = 0.0
+    var shouldBlink = false
+    var blinkPeriodLength = Duration.ZERO
+    var blinkDuration = Duration.ZERO
+
+    while (buffer.hasRemaining()) {
+        when (val type = buffer.get()) {
+            LightProgramTypes.RAMP.value -> {
+                println("Got RAMP")
+                hasRamp = true
+                rampDuration = Duration.ofMillis(buffer.long)
+                val (intensity, balance) = reverseLightStateBytes(buffer.get(), buffer.get())
+                targetIntensity = intensity
+                colorTemperatureBalance = balance
+            }
+            LightProgramTypes.FIXED.value -> {
+                println("Got FIXED")
+                targetDuration = Duration.ofMillis(buffer.long)
+                val (intensity, balance) = reverseLightStateBytes(buffer.get(), buffer.get())
+                targetIntensity = intensity
+                colorTemperatureBalance = balance
+            }
+            LightProgramTypes.BLINK.value -> {
+                println("Got BLINK")
+                shouldBlink = true
+                blinkDuration = Duration.ofMillis(buffer.long)
+                val highLowDuration = buffer.short.toLong()
+                blinkPeriodLength = Duration.ofMillis(highLowDuration * 2)
+                buffer.position(buffer.position() + 2)
+                buffer.position(buffer.position() + 4)
+            }
+            else -> throw IllegalArgumentException("Unknown LightProgram type: $type")
+        }
+    }
+
+    return Alarm(schedule = schedule, action = AlarmAction(hasRamp, rampDuration, targetDuration,
+        targetIntensity, colorTemperatureBalance, shouldBlink, blinkPeriodLength, blinkDuration))
+}
+
 
 fun AlarmAction.toLightProgramBytes(): ByteArray {
     val byteList = mutableListOf<Byte>()
@@ -185,4 +249,10 @@ fun AlarmAction.toLightProgramBytes(): ByteArray {
     }
     return byteList.toByteArray()
 }
+
+/*fun AlarmAction.toString() : String {
+    return "AlarmAction(hasRamp=$hasRamp, rampDuration=$rampDuration, targetDuration=$targetDuration, targetIntensity=$targetIntensity, colorTemperatureBalance=$colorTemperatureBalance, shouldBlink=$shouldBlink, blinkPeriodLength=$blinkPeriodLength, blinkDuration=$blinkDuration)"
+}*/
+
+
 

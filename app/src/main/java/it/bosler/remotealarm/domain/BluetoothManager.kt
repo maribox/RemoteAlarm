@@ -1,6 +1,5 @@
 package it.bosler.remotealarm.domain
 
-import android.R.attr.action
 import android.util.Log
 import com.benasher44.uuid.uuidFrom
 import com.juul.kable.*
@@ -9,9 +8,9 @@ import com.juul.kable.logs.Logging.Level.Warnings
 import it.bosler.remotealarm.data.Alarms.Alarm
 import it.bosler.remotealarm.data.Alarms.Schedule.SpecificMoment
 import it.bosler.remotealarm.data.Alarms.Schedule.WeekdaysWithLocalTime
-import it.bosler.remotealarm.data.Alarms.ScheduleType
 import it.bosler.remotealarm.shared.toBytes
 import it.bosler.remotealarm.shared.toFormattedHex
+import it.bosler.remotealarm.ui.viewmodel.fromLightProgramsBytes
 import it.bosler.remotealarm.ui.viewmodel.toLightProgramBytes
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -23,7 +22,8 @@ private const val SCAN_DURATION_MILLIS = 10_000L // 10 seconds
 
 private const val LIGHT_SERVICE_UUID = "b53e36d0-a21b-47b2-abac-343f523ff4d5"
 
-private const val ALARM_ARRAY_CHARACTERISTIC_UUID = "a14af994-2a22-4762-b9e5-cb17a716645c"
+private const val ADD_LIGHT_PROGRAM_CHARACTERISTIC_UUID = "a14af994-2a22-4762-b9e5-cb17a716645c"
+private const val LIGHT_PROGRAMS_CHARACTERISTIC_UUID = "265b9c95-a99d-4477-99dd-fef48fa26004"
 private const val LIGHT_STATE_CHARACTERISTIC_UUID = "3c95cda9-7bde-471d-9c2b-ac0364befa78"
 private const val TIMESTAMP_CHARACTERISTIC_UUID = "ab110e08-d3bb-4c8c-87a7-51d7076218cf"
 
@@ -44,7 +44,8 @@ class BluetoothManager {
     val connectionState : StateFlow<State>?
         get() = connectedPeripheral?.state
 
-    private var alarmArrayChar: Characteristic? = null
+    private var addLightProgramChar: Characteristic? = null
+    private var lightProgramsChar: Characteristic? = null
     private var lightStateChar: Characteristic? = null
     private var timestampChar: Characteristic? = null
 
@@ -63,6 +64,12 @@ class BluetoothManager {
 
     private val _incompatibleAdvertisements = MutableStateFlow<List<PlatformAdvertisement>>(emptyList())
     val incompatibleAdvertisements: StateFlow<List<PlatformAdvertisement>> = _incompatibleAdvertisements.asStateFlow()
+
+    private val _alarmFlow = MutableSharedFlow<Alarm>()
+    val alarmFlow: SharedFlow<Alarm> get() = _alarmFlow
+    suspend fun pushAlarm(alarm: Alarm) {
+        _alarmFlow.emit(alarm)
+    }
 
     private val scanner = Scanner {
         logging {
@@ -151,6 +158,26 @@ class BluetoothManager {
             try {
                 connectedPeripheral!!.connect()
                 initializeCharacteristics()
+                connectedPeripheral!!.observe(lightProgramsChar!!).collect {
+                    Log.d("BluetoothManager/Char", "Received light programs: ${it.toFormattedHex()}")
+
+                    Alarm.fromLightProgramsBytes(it).let { alarm ->
+                        // TODO actually convert all bytes to new alarms, set list.
+                        // TODO -> big rewrite of the alarm system
+                        // reorganization of what viewmodels and bluetoothmanager do
+                        // change what is being transmitted
+                        // (also change light state byte to ushort)
+
+                        Log.d("BluetoothManager/Char", "Received alarm: $alarm")
+                        pushAlarm(alarm)
+                    }
+                }
+                connectedPeripheral!!.observe(lightStateChar!!).collect {
+                    Log.d("BluetoothManager/Char", "Received lightStateChar: ${it.toFormattedHex()}")
+                    reverseLightStateBytes(it[0], it[1]).let { (intensity, balance) ->
+                        _lightState.value = LightState(intensity, balance)
+                    }
+                }
                 readInitialLightState()
                 updateLightPeripheral()
             } catch (e: Exception) {
@@ -170,9 +197,13 @@ class BluetoothManager {
     }
 
     private fun initializeCharacteristics() {
-        alarmArrayChar = characteristicOf(
+        addLightProgramChar = characteristicOf(
             service = LIGHT_SERVICE_UUID,
-            characteristic = ALARM_ARRAY_CHARACTERISTIC_UUID,
+            characteristic = ADD_LIGHT_PROGRAM_CHARACTERISTIC_UUID,
+        )
+        lightProgramsChar = characteristicOf(
+            service = LIGHT_SERVICE_UUID,
+            characteristic = LIGHT_PROGRAMS_CHARACTERISTIC_UUID,
         )
         lightStateChar = characteristicOf(
             service = LIGHT_SERVICE_UUID,
@@ -182,10 +213,6 @@ class BluetoothManager {
             service = LIGHT_SERVICE_UUID,
             characteristic = TIMESTAMP_CHARACTERISTIC_UUID,
         )
-
-        Log.d("BluetoothManager/Char", "Characteristic: ${alarmArrayChar?.characteristicUuid}")
-        Log.d("BluetoothManager/Char", "Characteristic: ${lightStateChar?.characteristicUuid}")
-        Log.d("BluetoothManager/Char", "Characteristic: ${timestampChar?.characteristicUuid}")
     }
 
     private suspend fun readInitialLightState() {
@@ -252,6 +279,22 @@ class BluetoothManager {
             val wwByte = round(ww * 255).coerceIn(0.0, 255.0).toInt().toByte()
             return cwByte to wwByte
         }
+
+        fun reverseLightStateBytes(cwByte: Byte, wwByte: Byte): Pair<Double, Double> {
+            val cw = (cwByte.toInt() and 0xFF) / 255.0
+            val ww = (wwByte.toInt() and 0xFF) / 255.0
+
+            val intensity = max(cw, ww)
+
+            val colorTemperatureBalance = if (cw == intensity) {
+                ww / (2 * intensity)
+            } else {
+                1 - (cw / (2 * intensity))
+            }
+
+            return intensity to colorTemperatureBalance
+        }
+
     }
 
     suspend fun setIntensity(intensity: Double) {
@@ -270,7 +313,7 @@ class BluetoothManager {
 
     @OptIn(ExperimentalStdlibApi::class)
     fun addAlarm(alarm: Alarm) {
-        if (alarmArrayChar == null) {
+        if (addLightProgramChar == null) {
             Log.e("BluetoothManager/Char", "AlarmArrayChar not initialized. Cannot write.")
             return
         }
@@ -279,7 +322,7 @@ class BluetoothManager {
         if (alarm.schedule is SpecificMoment) {
             alarmBytes += alarm.schedule.time.toEpochSecond().toBytes()
             alarmBytes += alarm.action.toLightProgramBytes()
-            writeToPeripheral(alarmArrayChar!!, alarmBytes)
+            writeToPeripheral(addLightProgramChar!!, alarmBytes)
         } else if (alarm.schedule is WeekdaysWithLocalTime) {
             throw NotImplementedError("WeekdaysWithLocalTime not implemented yet")
         }

@@ -8,11 +8,13 @@
 #include <chrono>
 #include <cstring>
 #include <ctime>
+#include <utility>
 #include <variant>
 #include <vector>
 
 #define SERVICE_UUID "b53e36d0-a21b-47b2-abac-343f523ff4d5"
-#define ALARM_ARRAY_CHARACTERISTIC_UUID "a14af994-2a22-4762-b9e5-cb17a716645c"
+#define ADD_LIGHT_PROGRAM_CHARACTERISTIC_UUID "a14af994-2a22-4762-b9e5-cb17a716645c" // W = App writes to it
+#define LIGHT_PROGRAMS_CHARACTERISTIC_UUID "265b9c95-a99d-4477-99dd-fef48fa26004"
 #define LIGHT_STATE_CHARACTERISTIC_UUID "3c95cda9-7bde-471d-9c2b-ac0364befa78"
 #define TIMESTAMP_CHARACTERISTIC_UUID "ab110e08-d3bb-4c8c-87a7-51d7076218cf"
 
@@ -26,41 +28,43 @@
 #define PWM_FREQUENCY 100  // 1 kHz
 #define PWM_RESOLUTION 8   // 8-bit resolution
 
-BLECharacteristic* pAlarmArrayCharacteristic;
+BLECharacteristic* pAddLightProgramCharacteristic;
+BLECharacteristic* pLightProgramsCharacteristic;
 BLECharacteristic* pLightStateCharacteristic;
 BLECharacteristic* pTimestampCharacteristic;
 
 BLEAdvertising* pAdvertising;
 
-BLEUUID alarmArrayUuid = BLEUUID(ALARM_ARRAY_CHARACTERISTIC_UUID);
+BLEUUID addLightProgramsUuid = BLEUUID(ADD_LIGHT_PROGRAM_CHARACTERISTIC_UUID);
+BLEUUID lightProgramsUuid = BLEUUID(LIGHT_PROGRAMS_CHARACTERISTIC_UUID);
 BLEUUID lightStateUuid = BLEUUID(LIGHT_STATE_CHARACTERISTIC_UUID);
 BLEUUID timestampUuid = BLEUUID(TIMESTAMP_CHARACTERISTIC_UUID);
 
-#define DEBUG_LEVEL 3
+#define DEBUG_LEVEL 4
 
-void logError(String message) {
-  if (DEBUG_LEVEL >= 1) {
+void logError(const String& message) {
+  if constexpr (DEBUG_LEVEL >= 1) {
     Serial.print("ERROR: ");
     Serial.println(message);
   }
 }
 
-void logWarning(String message) {
-  if (DEBUG_LEVEL >= 2) {
+void logWarning(const String& message) {
+  if constexpr (DEBUG_LEVEL >= 2) {
     Serial.print("WARNING: ");
     Serial.println(message);
   }
 }
 
-void logInfo(String message) {
-  if (DEBUG_LEVEL >= 3) {
+void logInfo(const String& message) {
+  if constexpr (DEBUG_LEVEL >= 3) {
     Serial.print("INFO: ");
     Serial.println(message);
   }
 }
 
-void logDebug(String message) {
-  if (DEBUG_LEVEL >= 4) {
+void logDebug(const String& message) {
+  if constexpr (DEBUG_LEVEL >= 4) {
     Serial.print("DEBUG: ");
     Serial.println(message);
   }
@@ -107,7 +111,7 @@ T popValFront(std::vector<uint8_t>& bytes) {
 String formatTime(const struct tm* timeDetails) {
   char buffer[100];
   strftime(buffer, sizeof(buffer), "%A, %B %d %Y %H:%M:%S", timeDetails);
-  return String(buffer);
+  return {buffer};
 }
 
 String getLocalTime(time_t timestamp) {
@@ -120,7 +124,7 @@ void setCurrentTime(time_t timestamp) {
   struct timeval tv {};
   tv.tv_sec = timestamp;
   tv.tv_usec = 0;
-  settimeofday(&tv, NULL);
+  settimeofday(&tv, nullptr);
 }
 
 std::pair<uint8_t, uint8_t> getLight() {
@@ -160,7 +164,7 @@ void updateLight() {
   }
   if (last_ww != ww) {
     if (ww) {
-      ledcWrite(PWM_CHANNEL_WW, (ww) ? ww : -1);
+      ledcWrite(PWM_CHANNEL_WW, ww);
     } else {
       ledcAttachPin(WW_PIN, PWM_CHANNEL_WW);
     }
@@ -172,6 +176,7 @@ void updateLight() {
 void setLight(uint8_t cw, uint8_t ww) {
   std::array<uint8_t, 2> colorValues = {cw, ww};
   pLightStateCharacteristic->setValue(&colorValues[0], 2);
+  pLightStateCharacteristic->notify();
   updateLight();
 }
 
@@ -225,10 +230,10 @@ struct LightActionFixed {
   }
 
   static LightActionFixed popFromBytes(std::vector<uint8_t>& bytes) {
-    uint64_t duration = popValFront<uint64_t>(bytes);
-    uint8_t CW = popValFront<uint8_t>(bytes);
-    uint8_t WW = popValFront<uint8_t>(bytes);
-    return LightActionFixed(duration, CW, WW);
+    auto duration = popValFront<uint64_t>(bytes);
+    auto CW = popValFront<uint8_t>(bytes);
+    auto WW = popValFront<uint8_t>(bytes);
+    return {duration, CW, WW};
   }
 };
 
@@ -244,10 +249,10 @@ struct LightActionRamp {
   LightActionRamp() = default;
 
   static LightActionRamp popFromBytes(std::vector<uint8_t>& bytes) {
-    uint64_t duration = popValFront<uint64_t>(bytes);
-    uint8_t targetCW = popValFront<uint8_t>(bytes);
-    uint8_t targetWW = popValFront<uint8_t>(bytes);
-    return LightActionRamp(duration, targetCW, targetWW);
+    auto duration = popValFront<uint64_t>(bytes);
+    auto targetCW = popValFront<uint8_t>(bytes);
+    auto targetWW = popValFront<uint8_t>(bytes);
+    return {duration, targetCW, targetWW};
   }
 };
 
@@ -278,14 +283,14 @@ struct LightActionBlink {
   }
 
   static LightActionBlink popFromBytes(std::vector<uint8_t>& bytes) {
-    uint64_t blinkDuration = popValFront<uint64_t>(bytes);
-    uint16_t lowDuration = popValFront<uint16_t>(bytes);
-    uint16_t highDuration = popValFront<uint16_t>(bytes);
-    uint8_t lowCW = popValFront<uint8_t>(bytes);
-    uint8_t lowWW = popValFront<uint8_t>(bytes);
-    uint8_t highCW = popValFront<uint8_t>(bytes);
-    uint8_t highWW = popValFront<uint8_t>(bytes);
-    return LightActionBlink(blinkDuration, lowDuration, highDuration, lowCW, lowWW, highCW, highWW);
+    auto blinkDuration = popValFront<uint64_t>(bytes);
+    auto lowDuration = popValFront<uint16_t>(bytes);
+    auto highDuration = popValFront<uint16_t>(bytes);
+    auto lowCW = popValFront<uint8_t>(bytes);
+    auto lowWW = popValFront<uint8_t>(bytes);
+    auto highCW = popValFront<uint8_t>(bytes);
+    auto highWW = popValFront<uint8_t>(bytes);
+    return {blinkDuration, lowDuration, highDuration, lowCW, lowWW, highCW, highWW};
   };
 };
 
@@ -294,7 +299,7 @@ using LightProgramAction = std::variant<LightActionFixed, LightActionRamp, Light
 struct SpecificMoment {
   time_t time = {};
 
-  SpecificMoment(time_t t)
+  explicit SpecificMoment(time_t t)
       : time(t) {
   }
   SpecificMoment() = default;
@@ -322,23 +327,22 @@ struct LightProgram {
   std::vector<LightProgramAction> actions = {};
 
   LightProgram() = default;
-  LightProgram(Schedule s)
-      : schedule(s) {};
+  explicit LightProgram(Schedule s)
+      : schedule(std::move(s)) {};
 };
 
 void printAlarm(const LightProgram& lightProgram) {
   logInfo("LightProgram Action: ");
 
   logInfo("Schedule Type: ");
-  std::visit([](const auto& schedule) {
+  std::visit([]([[maybe_unused]] const auto& schedule) {
     using T = std::decay_t<decltype(schedule)>;
     if constexpr (std::is_same_v<T, SpecificMoment>) {
       logInfo("Specific Timestamp");
     } else if constexpr (std::is_same_v<T, WeekdaysWithLocalTime>) {
       logInfo("Weekdays With Local Time");
     }
-  },
-             lightProgram.schedule);
+  },lightProgram.schedule);
 }
 
 bool operator==(const SpecificMoment& lhs, const SpecificMoment& rhs) {
@@ -382,41 +386,43 @@ bool operator==(const LightProgram& lhs, const LightProgram& rhs) {
 std::vector<LightProgram> lightPrograms{};
 esp_timer_handle_t alarm_timer;
 
-class AlarmArrayCharacteristicHandler : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* pCharacteristic) {
+class AddLightProgramCharacteristicHandler final : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic* pCharacteristic) override {
     auto bodySize = pCharacteristic->getLength();
-    logDebug("Alarms written with length " + String(bodySize));
+    logDebug("LightPrograms written with length " + String(bodySize));
 
-    auto pAlarmArray = pCharacteristic->getData();
+    auto pLightPrograms = pCharacteristic->getData();
 
-    std::vector<uint8_t> alarmBytes(bodySize);
-    std::copy_n(pAlarmArray, bodySize, alarmBytes.begin());
+    std::vector<uint8_t> lightProgramBytes(bodySize);
+    std::copy_n(pLightPrograms, bodySize, lightProgramBytes.begin());
+    std::vector<uint8_t> originalLightProgramBytes(lightProgramBytes);
 
-    hexPrint(alarmBytes);
-    time_t timestamp = static_cast<time_t>(popValFront<uint64_t>(alarmBytes));
+    hexPrint(lightProgramBytes);
+    auto timestamp = static_cast<time_t>(popValFront<uint64_t>(lightProgramBytes));
 
     logInfo("Adding lightProgram at " + getLocalTime(timestamp));
     LightProgram lightProgram{SpecificMoment(timestamp)};
 
-    auto ramp = LightActionRamp{};
-    while (alarmBytes.size() > 0) {
-      auto type = popValFront<uint8_t>(alarmBytes);
+    while (!lightProgramBytes.empty()) {
+      auto type = popValFront<uint8_t>(lightProgramBytes);
 
       Serial.printf("Found new Element with type %d\n", type);
       switch (toLightProgramType(type)) {
         case LightProgramType::FIXED:
-          lightProgram.actions.push_back(LightActionFixed::popFromBytes(alarmBytes));
+          lightProgram.actions.emplace_back(LightActionFixed::popFromBytes(lightProgramBytes));
           break;
-        case LightProgramType::RAMP:
-          ramp = LightActionRamp::popFromBytes(alarmBytes);
+        case LightProgramType::RAMP: {
+          auto ramp = LightActionRamp{};
+          ramp = LightActionRamp::popFromBytes(lightProgramBytes);
           if (ramp.durationMs == 0) {
-            logWarning("Received invalid duration for ramp, skipping");
-            break;
+            logWarning("Received invalid duration for ramp, aborting.");
+            return;
           }
-          lightProgram.actions.push_back(ramp);
+          lightProgram.actions.emplace_back(ramp);
           break;
+        }
         case LightProgramType::BLINK:
-          lightProgram.actions.push_back(LightActionBlink::popFromBytes(alarmBytes));
+          lightProgram.actions.emplace_back(LightActionBlink::popFromBytes(lightProgramBytes));
           break;
         default:
           break;
@@ -424,36 +430,43 @@ class AlarmArrayCharacteristicHandler : public BLECharacteristicCallbacks {
     }
 
     // TODO: remove when using timer?
-    auto it = std::find(lightPrograms.begin(), lightPrograms.end(), lightProgram);
-    if (it == lightPrograms.end()) {  // ensure we're not adding the same lightProgram twice
+    if (const auto it = std::find(lightPrograms.begin(), lightPrograms.end(), lightProgram); it == lightPrograms.end()) {  // ensure we're not adding the same lightProgram twice
       lightPrograms.push_back(lightProgram);
+      // TODO set value to all alarms
+      pLightProgramsCharacteristic->setValue(originalLightProgramBytes.data(), originalLightProgramBytes.size());
+      pLightProgramsCharacteristic->indicate();
+      logDebug("Updated list of LightPrograms.");
     }
 
     pCharacteristic->setValue("");
     // TODO: error handling
   }
 
-  void onRead(BLECharacteristic* pCharacteristic) {
+  void onRead(BLECharacteristic* pCharacteristic) override {
     logDebug("Alarms read");
   }
 };
 
-// TODO expose other set_lightProgram Charactertistic that enables reading and deleting of set lightPrograms
+class LightProgramsCharacteristicHandler final : public BLECharacteristicCallbacks {
+  void onRead(BLECharacteristic *pCharacteristic) override {
+
+  }
+};
 
 class LightStateCharacteristicHandler : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* pCharacteristic) {
+  void onWrite(BLECharacteristic* pCharacteristic) override {
     // Light flickers when updating too often. Use active waiting in main loop if too flickery
     updateLight();
     // Serial.println("LightState written.");
   }
 
-  void onRead(BLECharacteristic* pCharacteristic) {
+  void onRead(BLECharacteristic* pCharacteristic) override {
     logDebug("LightState read");
   }
 };
 
 class TimestampCharacteristicHandler : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* pCharacteristic) {
+  void onWrite(BLECharacteristic* pCharacteristic) override {
     logDebug("Timestamp written with length " + String(pCharacteristic->getLength()));
 
     auto pTimestampValue = pTimestampCharacteristic->getData();
@@ -465,18 +478,18 @@ class TimestampCharacteristicHandler : public BLECharacteristicCallbacks {
     logInfo("Current time: " + getLocalTime(timestamp));
   }
 
-  void onRead(BLECharacteristic* pCharacteristic) {
+  void onRead(BLECharacteristic* pCharacteristic) override {
     logDebug("Timestamp read");
   }
 };
 
 class BLEServerHandler : public BLEServerCallbacks {
-  void onDisconnect(BLEServer* pServer) {
+  void onDisconnect(BLEServer* pServer) override {
     logInfo("Server disconnected.");
     // pServer->startAdvertising();
   }
 
-  void onConnect(BLEServer* pServer) {
+  void onConnect(BLEServer* pServer) override {
     logInfo("Server connected.");
     pServer->startAdvertising();
   }
@@ -490,8 +503,8 @@ void startAdvertising() {
 
 uint64_t getCurrentUsecUTC() {
     struct timeval current {};
-    gettimeofday(&current, NULL);
-    return static_cast<uint64_t>(current.tv_sec) * 1E6 + current.tv_usec;
+    gettimeofday(&current, nullptr);
+    return 1'000'000 * static_cast<uint64_t>(current.tv_sec) + current.tv_usec;
 }
 
 void printAction(const LightProgramAction& action) {
@@ -507,7 +520,6 @@ void printAction(const LightProgramAction& action) {
   },action);
 }
 
-
 void executeLightProgram(LightProgram lightProgram) {
   // TODO: Think about async? Maybe start lightProgram as new thread (maybe interrupt if new one comes in)
   for (auto& action : lightProgram.actions) {
@@ -519,19 +531,19 @@ void executeLightProgram(LightProgram lightProgram) {
         setLight(action.CW, action.WW);
         delay(action.durationMs);
       } else if constexpr (std::is_same_v<T, LightActionRamp>) {
-        int64_t start_usec = getCurrentUsecUTC();
-        int64_t now_usec, progress_usec;
+        uint64_t start_usec = getCurrentUsecUTC();
+        uint64_t now_usec, progress_usec;
         double progress_percent;
         auto [startCW, startWW] = getLight();
         auto diffCW = action.targetCW - startCW;
         auto diffWW = action.targetWW - startWW;
         uint8_t newCW, newWW;
-        int64_t rampDurationUsec = action.durationMs *1000;
+        uint64_t rampDurationUsec = action.durationMs *1000;
 
         do {
           now_usec = getCurrentUsecUTC();
           progress_usec = now_usec - start_usec;
-          progress_percent = ((double) progress_usec) / (action.durationMs * 1000);
+          progress_percent = static_cast<double>(progress_usec) / (action.durationMs * 1000);
           newCW = startCW + progress_percent * diffCW;
           newWW = startWW + progress_percent * diffWW;
           setLight(newCW, newWW);
@@ -553,6 +565,43 @@ void executeLightProgram(LightProgram lightProgram) {
   }
 }
 
+void init_characteristics(BLEService *pLightService) {
+  pAddLightProgramCharacteristic = pLightService->createCharacteristic(addLightProgramsUuid, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
+  pAddLightProgramCharacteristic->setValue({});
+  pAddLightProgramCharacteristic->setCallbacks(new AddLightProgramCharacteristicHandler());
+
+  pLightProgramsCharacteristic = pLightService->createCharacteristic(lightProgramsUuid, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_INDICATE);
+  pLightProgramsCharacteristic->setValue({});
+  pLightProgramsCharacteristic->setCallbacks(new LightProgramsCharacteristicHandler()); // TODO needed?
+
+  pLightStateCharacteristic = pLightService->createCharacteristic(lightStateUuid, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR | BLECharacteristic::PROPERTY_NOTIFY);
+  std::uint8_t byteArray[] = {0x00, 0x00};
+  pLightStateCharacteristic->setValue(byteArray, sizeof(byteArray));
+  pLightStateCharacteristic->setCallbacks(new LightStateCharacteristicHandler());
+
+  pTimestampCharacteristic = pLightService->createCharacteristic(timestampUuid, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
+  uint64_t customTimestamp = 0;
+  pTimestampCharacteristic->setValue(reinterpret_cast<std::uint8_t*>(&customTimestamp), 8);
+  pTimestampCharacteristic->setCallbacks(new TimestampCharacteristicHandler());
+}
+
+void init_advertising() {
+  BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
+
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(true);
+  pAdvertising->setMinPreferred(0x06);
+  pAdvertising->setMinPreferred(0x12);
+
+  startAdvertising();
+}
+
+
+void init_server(BLEServer *&pLightServer) {
+  pLightServer = BLEDevice::createServer();
+  pLightServer->setCallbacks(new BLEServerHandler());
+}
+
 void setup() {
   // using ledc for easier control of frequency so we don't have coil whining
   ledcSetup(PWM_CHANNEL_CW, PWM_FREQUENCY, PWM_RESOLUTION);
@@ -565,38 +614,19 @@ void setup() {
 
   Serial.begin(115200);
   logInfo("Starting BLE work!");
+
   BLEDevice::setMTU(512);  // needs to be set on android side too for some reason
 
   BLEDevice::init("Marius' Licht");
 
-  BLEServer* pLightServer = BLEDevice::createServer();
-  pLightServer->setCallbacks(new BLEServerHandler());
+  BLEServer *pLightServer;
+  init_server(pLightServer);
 
   BLEService* pLightService = pLightServer->createService(SERVICE_UUID);
-  pAlarmArrayCharacteristic = pLightService->createCharacteristic(alarmArrayUuid, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
-  pAlarmArrayCharacteristic->setValue({});
-  pAlarmArrayCharacteristic->setCallbacks(new AlarmArrayCharacteristicHandler());
-
-  pLightStateCharacteristic = pLightService->createCharacteristic(lightStateUuid, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
-  std::uint8_t byteArray[] = {0x00, 0x00};
-  pLightStateCharacteristic->setValue(byteArray, sizeof(byteArray));
-  pLightStateCharacteristic->setCallbacks(new LightStateCharacteristicHandler());
-
-  pTimestampCharacteristic = pLightService->createCharacteristic(timestampUuid, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
-  int64_t customTimestamp = 0;
-  pTimestampCharacteristic->setValue(reinterpret_cast<std::uint8_t*>(&customTimestamp), 8);
-  pTimestampCharacteristic->setCallbacks(new TimestampCharacteristicHandler());
-
+  init_characteristics(pLightService);
   pLightService->start();
 
-  BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
-
-  pAdvertising->addServiceUUID(SERVICE_UUID);
-  pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(0x06);
-  pAdvertising->setMinPreferred(0x12);
-
-  startAdvertising();
+  init_advertising();
 }
 
 void loop() {
@@ -606,9 +636,9 @@ void loop() {
     std::visit([&lightProgram](const auto& schedule) {
       using T = std::decay_t<decltype(schedule)>;
       if constexpr (std::is_same_v<T, SpecificMoment>) {
-        uint64_t timestamp = static_cast<uint64_t>(schedule.time);
+        auto timestamp = static_cast<uint64_t>(schedule.time);
         Serial.println("---------------------");
-        Serial.println("LightProgram at: " + getLocalTime(timestamp));
+        Serial.println("LightProgram at: " + getLocalTime(static_cast<time_t>(timestamp)));
         for (auto& action : lightProgram.actions) {
           printAction(action);
         }
